@@ -829,15 +829,15 @@ export function IssuesList({
                                         <Identity name={agentName(issue.assigneeAgentId)!} size="sm" />
                                       ) : issue.assigneeUserId ? (
                                         <span className="inline-flex items-center gap-1.5 text-xs">
-                                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-muted-foreground/35 bg-muted/30">
-                                            <User className="h-3 w-3" />
+                                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-muted-foreground/35 bg-muted/30">
+                                            <User className="h-3.5 w-3.5" />
                                           </span>
                                           {formatAssigneeUserLabel(issue.assigneeUserId, currentUserId) ?? "User"}
                                         </span>
                                       ) : (
                                         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-muted-foreground/35 bg-muted/30">
-                                            <User className="h-3 w-3" />
+                                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-muted-foreground/35 bg-muted/30">
+                                            <User className="h-3.5 w-3.5" />
                                           </span>
                                           Assignee
                                         </span>
