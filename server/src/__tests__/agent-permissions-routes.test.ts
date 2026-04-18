@@ -109,6 +109,7 @@ function registerModuleMocks() {
     companySkillService: () => mockCompanySkillService,
     budgetService: () => mockBudgetService,
     heartbeatService: () => mockHeartbeatService,
+    ISSUE_LIST_DEFAULT_LIMIT: 500,
     issueApprovalService: () => mockIssueApprovalService,
     issueService: () => mockIssueService,
     logActivity: mockLogActivity,
@@ -674,6 +675,12 @@ describe("agent permission routes", () => {
         status: "todo",
       },
     ]);
+    expect(mockIssueService.list).toHaveBeenCalledWith(companyId, {
+      touchedByUserId: "board-user",
+      inboxArchivedByUserId: "board-user",
+      status: "backlog,todo,in_progress,in_review,blocked,done",
+      limit: 500,
+    });
   });
 
   it("rejects heartbeat cancellation outside the caller company scope", async () => {

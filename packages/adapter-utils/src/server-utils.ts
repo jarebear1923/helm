@@ -180,6 +180,11 @@ export function appendWithCap(prev: string, chunk: string, cap = MAX_CAPTURE_BYT
   return combined.length > cap ? combined.slice(combined.length - cap) : combined;
 }
 
+function resumeReadable(readable: { resume: () => unknown; destroyed?: boolean } | null | undefined) {
+  if (!readable || readable.destroyed) return;
+  readable.resume();
+}
+
 export function resolvePathValue(obj: Record<string, unknown>, dottedPath: string) {
   const parts = dottedPath.split(".");
   let cursor: unknown = obj;
@@ -1134,19 +1139,25 @@ export async function runChildProcess(
             : null;
 
         child.stdout?.on("data", (chunk: unknown) => {
+          const readable = child.stdout;
+          readable?.pause();
           const text = String(chunk);
           stdout = appendWithCap(stdout, text);
           logChain = logChain
             .then(() => opts.onLog("stdout", text))
-            .catch((err) => onLogError(err, runId, "failed to append stdout log chunk"));
+            .catch((err) => onLogError(err, runId, "failed to append stdout log chunk"))
+            .finally(() => resumeReadable(readable));
         });
 
         child.stderr?.on("data", (chunk: unknown) => {
+          const readable = child.stderr;
+          readable?.pause();
           const text = String(chunk);
           stderr = appendWithCap(stderr, text);
           logChain = logChain
             .then(() => opts.onLog("stderr", text))
-            .catch((err) => onLogError(err, runId, "failed to append stderr log chunk"));
+            .catch((err) => onLogError(err, runId, "failed to append stderr log chunk"))
+            .finally(() => resumeReadable(readable));
         });
 
         const stdin = child.stdin;
