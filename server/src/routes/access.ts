@@ -18,6 +18,7 @@ import {
   companies,
   companyLogos,
   companyMemberships,
+  instanceUserRoles,
   invites,
   joinRequests,
   principalPermissionGrants,
@@ -1075,11 +1076,18 @@ async function getProtectedMemberReason(
   access: ReturnType<typeof accessService>,
   companyId: string,
   member: { principalId: string; principalType: string; membershipRole: string | null },
+  opts?: {
+    actorRole?: HumanCompanyMembershipRole | null;
+    instanceAdminUserIds?: ReadonlySet<string>;
+  },
 ): Promise<string | null> {
   if (member.principalType !== "user") return "Only human company members can be removed.";
   if (req.actor.type !== "board") return "Board access is required to remove members.";
   if (member.principalId === req.actor.userId) return "You cannot remove yourself.";
-  if (await access.isInstanceAdmin(member.principalId)) {
+  const isTargetInstanceAdmin = opts?.instanceAdminUserIds
+    ? opts.instanceAdminUserIds.has(member.principalId)
+    : await access.isInstanceAdmin(member.principalId);
+  if (isTargetInstanceAdmin) {
     return "Instance admins cannot be removed from company access.";
   }
 
@@ -1089,7 +1097,7 @@ async function getProtectedMemberReason(
   if (targetRole === "owner") return "Board owners cannot be removed from company access.";
   if (targetRole === "admin") return "Company admins cannot be removed from company access.";
 
-  const actorRole = await resolveActorHumanRole(req, access, companyId);
+  const actorRole = opts?.actorRole ?? await resolveActorHumanRole(req, access, companyId);
   if (!actorRole) return "Only active company members can remove users.";
   if (humanRoleRank[targetRole] >= humanRoleRank[actorRole]) {
     return "You can only remove users below your company role.";
@@ -1110,13 +1118,30 @@ async function assertCanManageCompanyMember(
 
 async function addCompanyMemberRemovalAccess(
   req: Request,
+  db: Db,
   access: ReturnType<typeof accessService>,
   companyId: string,
   members: CompanyMemberRecord[],
 ) {
+  const actorRole = await resolveActorHumanRole(req, access, companyId);
+  const userIds = [...new Set(members
+    .filter((member) => member.principalType === "user")
+    .map((member) => member.principalId))];
+  const instanceAdminUserIds = userIds.length > 0
+    ? new Set(
+      await db
+        .select({ userId: instanceUserRoles.userId })
+        .from(instanceUserRoles)
+        .where(and(inArray(instanceUserRoles.userId, userIds), eq(instanceUserRoles.role, "instance_admin")))
+        .then((rows) => rows.map((row) => row.userId)),
+    )
+    : new Set<string>();
   return Promise.all(
     members.map(async (member) => {
-      const reason = await getProtectedMemberReason(req, access, companyId, member);
+      const reason = await getProtectedMemberReason(req, access, companyId, member, {
+        actorRole,
+        instanceAdminUserIds,
+      });
       return {
         ...member,
         removal: {
@@ -3691,7 +3716,7 @@ export function accessRoutes(
       loadCompanyAccessSummary(req, access, companyId),
     ]);
     res.json({
-      members: await addCompanyMemberRemovalAccess(req, access, companyId, members),
+      members: await addCompanyMemberRemovalAccess(req, db, access, companyId, members),
       access: currentAccess,
     });
   });

@@ -121,7 +121,7 @@ export const archiveCompanyMemberSchema = z.object({
   reassignment: z
     .object({
       assigneeAgentId: z.string().uuid().optional().nullable(),
-      assigneeUserId: z.string().optional().nullable(),
+      assigneeUserId: z.string().uuid().optional().nullable(),
     })
     .optional()
     .nullable(),

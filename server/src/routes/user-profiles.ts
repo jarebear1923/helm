@@ -84,7 +84,8 @@ async function resolveCompanyUser(db: Db, companyId: string, rawSlug: string): P
         eq(companyMemberships.principalType, "user"),
       ),
     )
-    .orderBy(desc(companyMemberships.updatedAt));
+    .orderBy(desc(companyMemberships.updatedAt))
+    .limit(200);
 
   return rows.find((row) => userSlugCandidates(row).includes(slug)) ?? null;
 }
