@@ -20,4 +20,11 @@ describe("company routes", () => {
       "/execution-workspaces/workspace-123",
     );
   });
+
+  it("keeps artifacts compatibility paths company scoped", () => {
+    expect(isBoardPathWithoutPrefix("/artifacts")).toBe(true);
+    expect(extractCompanyPrefixFromPath("/artifacts")).toBeNull();
+    expect(applyCompanyPrefix("/artifacts", "PAP")).toBe("/PAP/artifacts");
+    expect(applyCompanyPrefix("/work-product?filter=files", "PAP")).toBe("/PAP/work-product?filter=files");
+  });
 });

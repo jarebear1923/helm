@@ -50,7 +50,8 @@ export const queryKeys = {
     documents: (issueId: string) => ["issues", "documents", issueId] as const,
     document: (issueId: string, key: string) => ["issues", "document", issueId, key] as const,
     documentRevisions: (issueId: string, key: string) => ["issues", "document-revisions", issueId, key] as const,
-    deliverables: (issueId: string) => ["issues", "deliverables", issueId] as const,
+    deliverables: (issueId: string, includeOperatorContext = false) =>
+      ["issues", "deliverables", issueId, includeOperatorContext] as const,
     activity: (issueId: string) => ["issues", "activity", issueId] as const,
     runs: (issueId: string) => ["issues", "runs", issueId] as const,
     approvals: (issueId: string) => ["issues", "approvals", issueId] as const,
@@ -82,7 +83,8 @@ export const queryKeys = {
     detail: (id: string) => ["goals", "detail", id] as const,
   },
   artifacts: {
-    list: (companyId: string) => ["artifacts", companyId] as const,
+    list: (companyId: string, includeOperatorContext = false) =>
+      ["work-product", companyId, includeOperatorContext] as const,
   },
   budgets: {
     overview: (companyId: string) => ["budgets", "overview", companyId] as const,

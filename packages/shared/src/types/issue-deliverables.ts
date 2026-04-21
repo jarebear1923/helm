@@ -28,6 +28,7 @@ export interface IssueDeliverableItem {
   revisionNumber: number | null;
   contentType: string | null;
   byteSize: number | null;
+  isOperatorContext: boolean;
 }
 
 export interface IssueDeliverablesRuntimeServiceSummary {

@@ -989,9 +989,10 @@ export function IssueDetail() {
     enabled: !!issueId,
     placeholderData: keepPreviousDataForSameQueryTail<IssueAttachment[]>(issueId ?? "pending"),
   });
+  const [showOperatorContextWorkProduct, setShowOperatorContextWorkProduct] = useState(false);
   const { data: deliverables, isLoading: deliverablesLoading } = useQuery({
-    queryKey: queryKeys.issues.deliverables(issueId!),
-    queryFn: () => issuesApi.getDeliverables(issueId!),
+    queryKey: queryKeys.issues.deliverables(issueId!, showOperatorContextWorkProduct),
+    queryFn: () => issuesApi.getDeliverables(issueId!, { includeOperatorContext: showOperatorContextWorkProduct }),
     enabled: !!issueId,
     placeholderData: keepPreviousDataForSameQueryTail<Awaited<ReturnType<typeof issuesApi.getDeliverables>>>(
       issueId ?? "pending",
@@ -2418,7 +2419,18 @@ export function IssueDetail() {
           className="text-xl font-bold"
         />
 
-        <IssueDeliverablesSummaryChips summary={deliverables?.summary} />
+        <IssueDeliverablesSummaryChips
+          summary={deliverables?.summary}
+          onOpenDocuments={() => {
+            document.getElementById("issue-documents")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          onOpenWorkProduct={(sectionId) => {
+            setDetailTab("work-product");
+            window.setTimeout(() => {
+              document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }, 0);
+          }}
+        />
 
         <InlineEditor
           value={issue.description ?? ""}
@@ -2743,6 +2755,8 @@ export function IssueDetail() {
             projectId={issue.projectId}
             projectWorkspaceId={issue.projectWorkspaceId}
             isLoading={deliverablesLoading}
+            showOperatorContext={showOperatorContextWorkProduct}
+            onShowOperatorContextChange={setShowOperatorContextWorkProduct}
           />
         </TabsContent>
 

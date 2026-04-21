@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@/lib/router";
+import { Link, useSearchParams } from "@/lib/router";
 import type { CompanyDeliverableItem } from "@paperclipai/shared";
 import { issuesApi } from "../api/issues";
 import { projectsApi } from "../api/projects";
@@ -11,6 +11,7 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { queryKeys } from "../lib/queryKeys";
 import { createIssueDetailPath } from "../lib/issueDetailBreadcrumb";
 import { projectUrl, relativeTime } from "../lib/utils";
@@ -81,46 +82,69 @@ function deliverableMeta(item: CompanyDeliverableItem) {
       return {
         label: "Document",
         icon: FileText,
-        accentClass: "from-amber-200/80 via-amber-50 to-background",
-        badgeClass: "bg-amber-500/10 text-amber-700 border-amber-500/20",
       };
     case "preview_url":
     case "runtime_service":
       return {
         label: "Preview",
         icon: MonitorUp,
-        accentClass: "from-emerald-200/70 via-emerald-50/60 to-background",
-        badgeClass: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
       };
     case "pull_request":
       return {
         label: "Pull request",
         icon: GitPullRequestArrow,
-        accentClass: "from-sky-200/70 via-sky-50/60 to-background",
-        badgeClass: "bg-sky-500/10 text-sky-700 border-sky-500/20",
       };
     case "branch":
       return {
         label: "Branch",
         icon: GitBranch,
-        accentClass: "from-violet-200/70 via-violet-50/60 to-background",
-        badgeClass: "bg-violet-500/10 text-violet-700 border-violet-500/20",
       };
     case "commit":
       return {
         label: "Commit",
         icon: GitCommitHorizontal,
-        accentClass: "from-fuchsia-200/70 via-fuchsia-50/60 to-background",
-        badgeClass: "bg-fuchsia-500/10 text-fuchsia-700 border-fuchsia-500/20",
       };
     default:
       return {
         label: "File",
         icon: isImageItem(item) ? FileImage : Package,
-        accentClass: "from-zinc-200/70 via-zinc-50/60 to-background",
-        badgeClass: "bg-zinc-500/10 text-zinc-700 border-zinc-500/20",
       };
   }
+}
+
+function isSpotlightItem(item: CompanyDeliverableItem) {
+  return item.isPrimary || item.kind === "pull_request" || item.kind === "preview_url" || item.kind === "runtime_service";
+}
+
+function ImagePreview({
+  item,
+  fallbackIcon: FallbackIcon,
+}: {
+  item: CompanyDeliverableItem;
+  fallbackIcon: typeof FileImage;
+}) {
+  const [failed, setFailed] = useState(false);
+  const imagePreview = !failed && isImageItem(item) && item.url ? item.url : null;
+
+  if (!imagePreview) {
+    return (
+      <div className="flex aspect-[16/10] items-center justify-center border-b border-border bg-muted/30">
+        <FallbackIcon className="h-10 w-10 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="aspect-[16/10] overflow-hidden border-b border-border bg-muted/30">
+      <img
+        src={imagePreview}
+        alt={item.title}
+        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
 }
 
 function ArtifactCard({
@@ -135,42 +159,31 @@ function ArtifactCard({
   const meta = deliverableMeta(item);
   const href = itemHref(item);
   const sizeLabel = formatByteSize(item.byteSize);
-  const imagePreview = isImageItem(item) && item.url ? item.url : null;
   const MetaIcon = meta.icon;
   const isInternalDocLink = Boolean(href?.startsWith("/issues/"));
 
   return (
-    <article className="group overflow-hidden rounded-[1.4rem] border border-border/80 bg-card shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_28px_70px_-38px_rgba(15,23,42,0.45)]">
-      {imagePreview ? (
-        <div className="aspect-[16/10] overflow-hidden border-b border-border/80 bg-muted/40">
-          <img
-            src={imagePreview}
-            alt={item.title}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-          />
-        </div>
+    <article className="group overflow-hidden rounded-lg border border-border bg-card transition-colors duration-200 hover:border-foreground/30">
+      {isImageItem(item) ? (
+        <ImagePreview item={item} fallbackIcon={MetaIcon} />
       ) : (
-        <div className={`border-b border-border/80 bg-gradient-to-br ${meta.accentClass}`}>
-          <div className="flex aspect-[16/10] flex-col justify-between p-5">
-            <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${meta.badgeClass}`}>
-              <MetaIcon className="h-3.5 w-3.5" />
-              {meta.label}
+        <div className="flex aspect-[16/10] flex-col justify-between border-b border-border bg-muted/20 p-5">
+          <Badge variant="outline" className="w-fit gap-2">
+            <MetaIcon className="h-3.5 w-3.5" />
+            {meta.label}
+          </Badge>
+          {item.kind === "document" ? (
+            <p className="line-clamp-4 rounded-md border border-border bg-background p-3 text-sm leading-6 text-foreground">
+              {item.summary ?? "This document does not have a preview snippet yet."}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <MetaIcon className="h-10 w-10 text-foreground/70" />
+              <p className="max-w-[14rem] text-sm text-muted-foreground">
+                {item.summary ?? item.contentType ?? labelize(item.kind) ?? "Work product"}
+              </p>
             </div>
-            {item.kind === "document" ? (
-              <div className="rounded-2xl border border-black/5 bg-white/80 p-4 shadow-sm">
-                <p className="line-clamp-4 text-sm leading-6 text-slate-700">
-                  {item.summary ?? "This document does not have a preview snippet yet."}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <MetaIcon className="h-10 w-10 text-foreground/70" />
-                <p className="max-w-[14rem] text-sm text-muted-foreground">
-                  {item.summary ?? item.contentType ?? labelize(item.kind) ?? "Deliverable"}
-                </p>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       )}
 
@@ -184,6 +197,7 @@ function ArtifactCard({
               <Badge variant="secondary">{labelize(item.reviewState)}</Badge>
             ) : null}
             {item.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
+            {item.isOperatorContext ? <Badge variant="secondary">Operator context</Badge> : null}
             {item.documentKey ? <Badge variant="secondary">{item.documentKey}</Badge> : null}
             {item.revisionNumber ? <Badge variant="secondary">v{item.revisionNumber}</Badge> : null}
             {sizeLabel ? <Badge variant="secondary">{sizeLabel}</Badge> : null}
@@ -201,7 +215,7 @@ function ArtifactCard({
           ) : null}
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-muted/20 p-3.5">
+        <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3.5">
           <div className="flex items-start gap-2">
             <Package className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0">
@@ -271,17 +285,35 @@ function ArtifactCard({
 export function Artifacts() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<DeliverableFilter>("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get("q") ?? "";
+  const rawFilter = searchParams.get("filter") ?? "all";
+  const filter: DeliverableFilter = ["all", "documents", "files", "previews", "pullRequests", "code"].includes(rawFilter)
+    ? (rawFilter as DeliverableFilter)
+    : "all";
+  const selectedProjectId = searchParams.get("projectId") ?? "all";
+  const showOperatorContext = searchParams.get("operatorContext") === "true";
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
-    setBreadcrumbs([{ label: "Artifacts" }]);
+    setBreadcrumbs([{ label: "Work Product" }]);
   }, [setBreadcrumbs]);
 
-  const { data: deliverables, isLoading, error } = useQuery({
-    queryKey: queryKeys.artifacts.list(selectedCompanyId!),
-    queryFn: () => issuesApi.listCompanyDeliverables(selectedCompanyId!),
+  function updateParam(key: string, value: string | null) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (!value || value === "all" || value === "false") {
+        next.delete(key);
+      } else {
+        next.set(key, value);
+      }
+      return next;
+    }, { replace: true });
+  }
+
+  const { data: deliverables, isLoading, error, refetch } = useQuery({
+    queryKey: queryKeys.artifacts.list(selectedCompanyId!, showOperatorContext),
+    queryFn: () => issuesApi.listCompanyDeliverables(selectedCompanyId!, { includeOperatorContext: showOperatorContext }),
     enabled: !!selectedCompanyId,
   });
   const { data: projects } = useQuery({
@@ -302,6 +334,7 @@ export function Artifacts() {
     const query = deferredSearch.trim().toLowerCase();
     return (deliverables?.items ?? []).filter((item) => {
       if (!filterMatches(item, filter)) return false;
+      if (selectedProjectId !== "all" && item.projectId !== selectedProjectId) return false;
       if (!query) return true;
       const haystack = [
         item.title,
@@ -315,11 +348,10 @@ export function Artifacts() {
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [deferredSearch, deliverables?.items, filter]);
+  }, [deferredSearch, deliverables?.items, filter, selectedProjectId]);
 
   const featuredItems = useMemo(() => {
-    const candidates = filteredItems.filter((item) => item.isPrimary);
-    return (candidates.length > 0 ? candidates : filteredItems).slice(0, 3);
+    return filteredItems.filter(isSpotlightItem).slice(0, 3);
   }, [filteredItems]);
 
   const featuredIds = useMemo(() => new Set(featuredItems.map((item) => item.id)), [featuredItems]);
@@ -327,7 +359,7 @@ export function Artifacts() {
     () => filteredItems.filter((item) => !featuredIds.has(item.id)),
     [featuredIds, filteredItems],
   );
-  const showSpotlight = filter === "all" && !deferredSearch.trim() && featuredItems.length > 0;
+  const showSpotlight = featuredItems.length > 0;
   const feedItems = showSpotlight && remainingItems.length > 0 ? remainingItems : filteredItems;
 
   const filterOptions = [
@@ -344,7 +376,7 @@ export function Artifacts() {
   ];
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Package} message="Select a company to view artifacts." />;
+    return <EmptyState icon={Package} message="Select a company to view Work Product." />;
   }
 
   if (isLoading) {
@@ -353,38 +385,38 @@ export function Artifacts() {
 
   return (
     <div className="space-y-8">
-      <section className="overflow-hidden rounded-[1.75rem] border border-border/80 bg-gradient-to-br from-amber-50 via-background to-sky-50 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.35)]">
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="grid gap-6 px-6 py-7 lg:grid-cols-[1.35fr_0.65fr] lg:px-8">
           <div className="space-y-4">
-            <Badge variant="outline" className="bg-background/70">Company deliverables</Badge>
+            <Badge variant="outline">Company Work Product</Badge>
             <div className="space-y-2">
               <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-balance">
                 Documents, files, previews, and other work product in one place.
               </h2>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
                 Browse what agents have actually produced across the company. This view mixes issue documents,
-                uploaded files, previews, pull requests, branches, commits, and artifact records into one operator-facing gallery.
+                uploaded files, previews, pull requests, branches, and commits into one operator-facing gallery.
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="rounded-lg border border-border bg-background p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Items</p>
               <p className="mt-2 text-3xl font-semibold">{deliverables?.summary.totalCount ?? 0}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Mixed deliverables in the feed</p>
+              <p className="mt-1 text-xs text-muted-foreground">Mixed output in the feed</p>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="rounded-lg border border-border bg-background p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Issues</p>
               <p className="mt-2 text-3xl font-semibold">{deliverables?.summary.issueCount ?? 0}</p>
               <p className="mt-1 text-xs text-muted-foreground">Tasks with visible output</p>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="rounded-lg border border-border bg-background p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Docs</p>
               <p className="mt-2 text-3xl font-semibold">{deliverables?.summary.documentCount ?? 0}</p>
               <p className="mt-1 text-xs text-muted-foreground">Plans, briefs, reports, notes</p>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="rounded-lg border border-border bg-background p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Primary</p>
               <p className="mt-2 text-3xl font-semibold">{deliverables?.summary.primaryCount ?? 0}</p>
               <p className="mt-1 text-xs text-muted-foreground">Explicitly promoted outputs</p>
@@ -393,12 +425,19 @@ export function Artifacts() {
         </div>
       </section>
 
-      {error ? <p className="text-sm text-destructive">{error.message}</p> : null}
+      {error ? (
+        <EmptyState
+          icon={Package}
+          message={error.message}
+          action="Retry"
+          onAction={() => void refetch()}
+        />
+      ) : null}
 
       {!isLoading && (deliverables?.summary.totalCount ?? 0) === 0 ? (
         <EmptyState
           icon={Package}
-          message="No deliverables yet. Issue documents, uploaded files, previews, and other work product will appear here."
+          message="No Work Product yet. Issue documents, uploaded files, previews, and other output will appear here."
         />
       ) : null}
 
@@ -411,7 +450,7 @@ export function Artifacts() {
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => setFilter(option.id)}
+                    onClick={() => updateParam("filter", option.id)}
                     className={
                       option.id === filter
                         ? "inline-flex items-center gap-2 rounded-full border border-foreground/20 bg-foreground px-3.5 py-2 text-sm font-medium text-background"
@@ -426,14 +465,35 @@ export function Artifacts() {
                 ))}
               </div>
 
-              <div className="relative w-full lg:w-[22rem]">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search titles, issues, providers..."
-                  className="pl-9"
-                />
+              <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
+                <select
+                  value={selectedProjectId}
+                  onChange={(event) => updateParam("projectId", event.target.value)}
+                  className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+                  aria-label="Filter Work Product by project"
+                >
+                  <option value="all">All projects</option>
+                  {(projects ?? []).map((project) => (
+                    <option key={project.id} value={project.id}>{project.name}</option>
+                  ))}
+                </select>
+                <label className="flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground">
+                  <span>Show operator context</span>
+                  <ToggleSwitch
+                    checked={showOperatorContext}
+                    onCheckedChange={(checked) => updateParam("operatorContext", String(checked))}
+                    aria-label="Show operator context"
+                  />
+                </label>
+                <div className="relative w-full lg:w-[22rem]">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(event) => updateParam("q", event.target.value)}
+                    placeholder="Search titles, issues, providers..."
+                    className="pl-9"
+                  />
+                </div>
               </div>
             </div>
           </section>
@@ -446,7 +506,7 @@ export function Artifacts() {
                   <h3 className="text-xl font-semibold">Recent output worth opening first</h3>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Primary items and the freshest deliverables float to the top.
+                  Primary items, previews, and PRs float to the top.
                 </p>
               </div>
               <div className="grid gap-4 xl:grid-cols-3">
@@ -470,15 +530,15 @@ export function Artifacts() {
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Feed</p>
                 <h3 className="text-xl font-semibold">
-                  {deferredSearch.trim() || filter !== "all" ? "Filtered deliverables" : "Latest deliverables"}
+                  {deferredSearch.trim() || filter !== "all" || selectedProjectId !== "all" ? "Filtered Work Product" : "Latest Work Product"}
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">{filteredItems.length} visible item{filteredItems.length === 1 ? "" : "s"}</p>
             </div>
 
             {filteredItems.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-border px-6 py-12 text-center">
-                <p className="text-base font-medium">No deliverables match the current filter.</p>
+              <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
+                <p className="text-base font-medium">No Work Product matches the current filter.</p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Try another filter or clear the search to see more issue output.
                 </p>

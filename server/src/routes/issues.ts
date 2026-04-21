@@ -898,7 +898,8 @@ export function issueRoutes(
   router.get("/companies/:companyId/deliverables", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
-    const deliverables = await issueDeliverablesSvc.listForCompany(companyId);
+    const includeOperatorContext = req.query.includeOperatorContext === "true";
+    const deliverables = await issueDeliverablesSvc.listForCompany(companyId, { includeOperatorContext });
     res.json(deliverables);
   });
 
@@ -2239,7 +2240,8 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, issue.companyId);
-    const deliverables = await issueDeliverablesSvc.getForIssue(issue);
+    const includeOperatorContext = req.query.includeOperatorContext === "true";
+    const deliverables = await issueDeliverablesSvc.getForIssue(issue, { includeOperatorContext });
     res.json(deliverables);
   });
 

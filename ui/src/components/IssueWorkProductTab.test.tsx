@@ -71,6 +71,7 @@ function createDeliverables(): IssueDeliverablesResponse {
       revisionNumber: null,
       contentType: null,
       byteSize: null,
+      isOperatorContext: false,
     },
     previews: [
       {
@@ -92,6 +93,7 @@ function createDeliverables(): IssueDeliverablesResponse {
         revisionNumber: null,
         contentType: null,
         byteSize: null,
+        isOperatorContext: false,
       },
     ],
     pullRequests: [
@@ -114,6 +116,7 @@ function createDeliverables(): IssueDeliverablesResponse {
         revisionNumber: null,
         contentType: null,
         byteSize: null,
+        isOperatorContext: false,
       },
     ],
     branches: [],
@@ -138,6 +141,7 @@ function createDeliverables(): IssueDeliverablesResponse {
         revisionNumber: 2,
         contentType: "text/markdown",
         byteSize: null,
+        isOperatorContext: false,
       },
     ],
     files: [
@@ -160,6 +164,7 @@ function createDeliverables(): IssueDeliverablesResponse {
         revisionNumber: null,
         contentType: "text/plain",
         byteSize: 512,
+        isOperatorContext: false,
       },
     ],
   };
@@ -199,8 +204,8 @@ describe("IssueWorkProductTab", () => {
     expect(container.textContent).toContain("Primary output");
     expect(container.textContent).toContain("Current workspace");
     expect(container.textContent).toContain("Pull requests");
-    expect(container.textContent).toContain("Documents");
-    expect(container.querySelector('a[href="#document-plan"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Documents");
+    expect(container.querySelector('a[href="#document-plan"]')).toBeNull();
   });
 
   it("renders the empty state when nothing has been produced", async () => {
@@ -238,6 +243,6 @@ describe("IssueWorkProductTab", () => {
     });
     await flush();
 
-    expect(container.textContent).toContain("No deliverables are registered for this issue yet.");
+    expect(container.textContent).toContain("No work product is registered for this issue yet.");
   });
 });

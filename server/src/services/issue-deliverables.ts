@@ -38,6 +38,7 @@ type BuildIssueDeliverablesInput = {
   documents: IssueDocument[];
   legacyPlanDocument: LegacyPlanDocument | null;
   attachments: AttachmentInput[];
+  includeOperatorContext?: boolean;
 };
 
 type BuildCompanyDeliverablesInput = {
@@ -45,10 +46,34 @@ type BuildCompanyDeliverablesInput = {
   workProducts: IssueWorkProduct[];
   documents: IssueDocument[];
   attachments: AttachmentInput[];
+  includeOperatorContext?: boolean;
 };
 
-function compareItemsByRecency(a: IssueDeliverableItem, b: IssueDeliverableItem) {
+function kindBucket(kind: IssueDeliverableItem["kind"]) {
+  switch (kind) {
+    case "pull_request":
+      return 0;
+    case "preview_url":
+    case "runtime_service":
+      return 1;
+    case "branch":
+    case "commit":
+      return 2;
+    case "document":
+      return 3;
+    case "artifact":
+      return 4;
+    case "attachment":
+      return 5;
+    default:
+      return 99;
+  }
+}
+
+function compareDeliverableItems(a: IssueDeliverableItem, b: IssueDeliverableItem) {
   if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+  const bucketDelta = kindBucket(a.kind) - kindBucket(b.kind);
+  if (bucketDelta !== 0) return bucketDelta;
   return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
 }
 
@@ -99,6 +124,7 @@ function toWorkProductItem(product: IssueWorkProduct): IssueDeliverableItem {
     revisionNumber: null,
     contentType,
     byteSize,
+    isOperatorContext: false,
   };
 }
 
@@ -122,6 +148,7 @@ function toDocumentItem(document: IssueDocument): IssueDeliverableItem {
     revisionNumber: document.latestRevisionNumber,
     contentType: "text/markdown",
     byteSize: null,
+    isOperatorContext: false,
   };
 }
 
@@ -145,6 +172,7 @@ function toLegacyPlanItem(issue: LegacyPlanIssueInput, legacyPlanDocument: Legac
     revisionNumber: null,
     contentType: "text/markdown",
     byteSize: null,
+    isOperatorContext: false,
   };
 }
 
@@ -168,6 +196,7 @@ function toAttachmentItem(attachment: AttachmentInput): IssueDeliverableItem {
     revisionNumber: null,
     contentType: attachment.contentType,
     byteSize: attachment.byteSize,
+    isOperatorContext: Boolean(attachment.issueCommentId),
   };
 }
 
@@ -235,8 +264,6 @@ function pickPrimaryItem(groups: {
   workProducts: IssueWorkProduct[];
   previews: IssueDeliverableItem[];
   pullRequests: IssueDeliverableItem[];
-  documents: IssueDeliverableItem[];
-  files: IssueDeliverableItem[];
 }) {
   const explicitPrimary = [...groups.workProducts]
     .filter((product) => product.isPrimary)
@@ -248,31 +275,30 @@ function pickPrimaryItem(groups: {
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
   if (preview) return preview;
 
-  const pullRequest = [...groups.pullRequests].sort(compareItemsByRecency)[0];
+  const pullRequest = [...groups.pullRequests].sort(compareDeliverableItems)[0];
   if (pullRequest) return pullRequest;
 
-  const document = [...groups.documents]
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-  if (document) return document;
-
-  return [...groups.files].sort(compareItemsByRecency)[0] ?? null;
+  return null;
 }
 
 export function buildIssueDeliverables(input: BuildIssueDeliverablesInput): IssueDeliverablesResponse {
   const workspace = summarizeWorkspace(input.workspace);
   const workProductItems = input.workProducts.map(toWorkProductItem);
+  const attachments = input.includeOperatorContext
+    ? input.attachments
+    : input.attachments.filter((attachment) => !attachment.issueCommentId);
   const previews = workProductItems
     .filter((item) => item.kind === "preview_url" || item.kind === "runtime_service")
-    .sort(compareItemsByRecency);
+    .sort(compareDeliverableItems);
   const pullRequests = workProductItems
     .filter((item) => item.kind === "pull_request")
-    .sort(compareItemsByRecency);
+    .sort(compareDeliverableItems);
   const branches = workProductItems
     .filter((item) => item.kind === "branch")
-    .sort(compareItemsByRecency);
+    .sort(compareDeliverableItems);
   const commits = workProductItems
     .filter((item) => item.kind === "commit")
-    .sort(compareItemsByRecency);
+    .sort(compareDeliverableItems);
 
   const documentItems = [
     ...workProductItems.filter((item) => item.kind === "document"),
@@ -282,15 +308,13 @@ export function buildIssueDeliverables(input: BuildIssueDeliverablesInput): Issu
 
   const fileItems = [
     ...workProductItems.filter((item) => item.kind === "artifact"),
-    ...input.attachments.map(toAttachmentItem),
-  ].sort(compareItemsByRecency);
+    ...attachments.map(toAttachmentItem),
+  ].sort(compareDeliverableItems);
 
   const primaryItem = pickPrimaryItem({
     workProducts: input.workProducts,
     previews,
     pullRequests,
-    documents: documentItems,
-    files: fileItems,
   });
 
   return {
@@ -352,7 +376,11 @@ export function buildCompanyDeliverables(input: BuildCompanyDeliverablesInput): 
     items.push(toCompanyDeliverableItem(toDocumentItem(document), issue));
   }
 
-  for (const attachment of input.attachments) {
+  const attachments = input.includeOperatorContext
+    ? input.attachments
+    : input.attachments.filter((attachment) => !attachment.issueCommentId);
+
+  for (const attachment of attachments) {
     const issue = issueMap.get(attachment.issueId);
     if (!issue) continue;
     items.push(toCompanyDeliverableItem(toAttachmentItem(attachment), issue));
@@ -374,7 +402,7 @@ export function buildCompanyDeliverables(input: BuildCompanyDeliverablesInput): 
     );
   }
 
-  const sortedItems = [...items].sort(compareItemsByRecency);
+  const sortedItems = [...items].sort(compareDeliverableItems);
   const issueIds = new Set<string>();
   let primaryCount = 0;
   let previewCount = 0;
@@ -418,7 +446,7 @@ export function issueDeliverableService(db: Db) {
   const executionWorkspacesSvc = executionWorkspaceService(db);
 
   return {
-    listForCompany: async (companyId: string) => {
+    listForCompany: async (companyId: string, options?: { includeOperatorContext?: boolean }) => {
       const [issues, workProducts, documents, attachments] = await Promise.all([
         issuesSvc.list(companyId),
         workProductsSvc.listForCompany(companyId),
@@ -440,10 +468,11 @@ export function issueDeliverableService(db: Db) {
         workProducts,
         documents,
         attachments,
+        includeOperatorContext: options?.includeOperatorContext ?? false,
       });
     },
 
-    getForIssue: async (issue: IssueInput) => {
+    getForIssue: async (issue: IssueInput, options?: { includeOperatorContext?: boolean }) => {
       const legacyPlanBody = extractLegacyPlanBody(issue.description);
       const [workspace, workProducts, documents, attachments] = await Promise.all([
         issue.executionWorkspaceId ? executionWorkspacesSvc.getById(issue.executionWorkspaceId) : Promise.resolve(null),
@@ -465,6 +494,7 @@ export function issueDeliverableService(db: Db) {
             }
           : null,
         attachments,
+        includeOperatorContext: options?.includeOperatorContext ?? false,
       });
     },
   };

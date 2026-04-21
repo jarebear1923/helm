@@ -1,8 +1,11 @@
 import type { IssueDeliverableItem, IssueDeliverablesResponse } from "@paperclipai/shared";
 import { Link } from "@/lib/router";
 import { projectWorkspaceUrl, relativeTime } from "@/lib/utils";
+import { EmptyState } from "./EmptyState";
+import { PageSkeleton } from "./PageSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { FileText, FolderOpen, GitBranch, GitCommitHorizontal, Link2, MonitorUp, Package } from "lucide-react";
 
 function labelize(value: string | null | undefined) {
@@ -91,6 +94,7 @@ function ItemCard({ item }: { item: IssueDeliverableItem }) {
             ) : null}
             {item.documentKey ? <Badge variant="secondary">{item.documentKey}</Badge> : null}
             {item.contentType ? <Badge variant="secondary">{item.contentType}</Badge> : null}
+            {item.isOperatorContext ? <Badge variant="secondary">Operator context</Badge> : null}
             {sizeLabel ? <Badge variant="secondary">{sizeLabel}</Badge> : null}
           </div>
           {item.summary ? <p className="text-sm text-muted-foreground">{item.summary}</p> : null}
@@ -102,16 +106,18 @@ function ItemCard({ item }: { item: IssueDeliverableItem }) {
 }
 
 function DeliverableSection({
+  id,
   title,
   items,
 }: {
+  id: string;
   title: string;
   items: IssueDeliverableItem[];
 }) {
   if (items.length === 0) return null;
 
   return (
-    <section className="space-y-3">
+    <section id={id} className="scroll-mt-24 space-y-3">
       <div>
         <h3 className="text-sm font-semibold">{title}</h3>
         <p className="text-xs text-muted-foreground">{items.length} item{items.length === 1 ? "" : "s"}</p>
@@ -142,14 +148,18 @@ export function IssueWorkProductTab({
   projectId,
   projectWorkspaceId,
   isLoading = false,
+  showOperatorContext = false,
+  onShowOperatorContextChange,
 }: {
   deliverables: IssueDeliverablesResponse | null | undefined;
   projectId: string | null;
   projectWorkspaceId: string | null;
   isLoading?: boolean;
+  showOperatorContext?: boolean;
+  onShowOperatorContextChange?: (checked: boolean) => void;
 }) {
   if (isLoading && !deliverables) {
-    return <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Loading work product…</div>;
+    return <PageSkeleton variant="list" />;
   }
 
   if (!deliverables) {
@@ -161,12 +171,12 @@ export function IssueWorkProductTab({
   return (
     <div className="space-y-4">
       {deliverables.primaryItem ? (
-        <section className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
+        <section id="issue-work-product-primary" className="scroll-mt-24 space-y-3 rounded-lg border border-border bg-muted/20 p-4">
           <div className="flex items-center gap-2">
             <Link2 className="h-4 w-4 text-muted-foreground" />
             <div>
               <h3 className="text-sm font-semibold">Primary output</h3>
-              <p className="text-xs text-muted-foreground">The current best deliverable for this issue.</p>
+              <p className="text-xs text-muted-foreground">The current best Work Product for this issue.</p>
             </div>
           </div>
           <ItemCard item={deliverables.primaryItem} />
@@ -174,7 +184,7 @@ export function IssueWorkProductTab({
       ) : null}
 
       {deliverables.workspace ? (
-        <section className="space-y-3 rounded-lg border border-border p-4">
+        <section id="issue-work-product-workspace" className="scroll-mt-24 space-y-3 rounded-lg border border-border p-4">
           <div className="flex items-center gap-2">
             <FolderOpen className="h-4 w-4 text-muted-foreground" />
             <div>
@@ -217,23 +227,31 @@ export function IssueWorkProductTab({
         </section>
       ) : null}
 
-      <DeliverableSection title="Previews" items={deliverables.previews} />
-      <DeliverableSection title="Pull requests" items={deliverables.pullRequests} />
-      <DeliverableSection title="Branches" items={deliverables.branches} />
-      <DeliverableSection title="Commits" items={deliverables.commits} />
-      <DeliverableSection title="Documents" items={deliverables.documents} />
-      <DeliverableSection title="Files" items={deliverables.files} />
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-xs text-muted-foreground">Show operator context</span>
+        <ToggleSwitch
+          checked={showOperatorContext}
+          onCheckedChange={(checked) => onShowOperatorContextChange?.(checked)}
+          aria-label="Show operator context"
+        />
+      </div>
+
+      <DeliverableSection id="issue-work-product-previews" title="Previews" items={deliverables.previews} />
+      <DeliverableSection id="issue-work-product-pull-requests" title="Pull requests" items={deliverables.pullRequests} />
+      <DeliverableSection id="issue-work-product-branches" title="Branches" items={deliverables.branches} />
+      <DeliverableSection id="issue-work-product-commits" title="Commits" items={deliverables.commits} />
+      <DeliverableSection id="issue-work-product-files" title="Files" items={deliverables.files} />
 
       {!deliverables.summary.hasAny ? (
-        <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
-          No deliverables are registered for this issue yet. Documents, uploaded files, previews, PRs, and other work
-          product will appear here when they are created.
-        </div>
+        <EmptyState
+          icon={Package}
+          message="No work product is registered for this issue yet. Previews, PRs, files, and other output will appear here when they are created."
+        />
       ) : null}
 
       {deliverables.summary.hasAny && !deliverables.primaryItem ? (
         <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-          Outputs exist for this issue, but there is no single primary deliverable yet.
+          Outputs exist for this issue, but no primary Work Product has been promoted yet.
         </div>
       ) : null}
     </div>

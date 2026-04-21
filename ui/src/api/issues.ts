@@ -165,9 +165,18 @@ export const issuesApi = {
     api.post<Approval[]>(`/issues/${id}/approvals`, { approvalId }),
   unlinkApproval: (id: string, approvalId: string) =>
     api.delete<{ ok: true }>(`/issues/${id}/approvals/${approvalId}`),
-  getDeliverables: (id: string) => api.get<IssueDeliverablesResponse>(`/issues/${id}/deliverables`),
-  listCompanyDeliverables: (companyId: string) =>
-    api.get<CompanyDeliverablesResponse>(`/companies/${companyId}/deliverables`),
+  getDeliverables: (id: string, filters?: { includeOperatorContext?: boolean }) => {
+    const params = new URLSearchParams();
+    if (filters?.includeOperatorContext) params.set("includeOperatorContext", "true");
+    const qs = params.toString();
+    return api.get<IssueDeliverablesResponse>(`/issues/${id}/deliverables${qs ? `?${qs}` : ""}`);
+  },
+  listCompanyDeliverables: (companyId: string, filters?: { includeOperatorContext?: boolean }) => {
+    const params = new URLSearchParams();
+    if (filters?.includeOperatorContext) params.set("includeOperatorContext", "true");
+    const qs = params.toString();
+    return api.get<CompanyDeliverablesResponse>(`/companies/${companyId}/deliverables${qs ? `?${qs}` : ""}`);
+  },
   listCompanyWorkProducts: (
     companyId: string,
     filters?: {

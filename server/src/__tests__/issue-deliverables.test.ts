@@ -117,7 +117,7 @@ function createWorkspace(overrides: Partial<ExecutionWorkspace> = {}): Execution
 }
 
 describe("buildIssueDeliverables", () => {
-  it("pins the plan first in the documents list while choosing the newest document as primary", () => {
+  it("pins the plan first in the documents list without promoting documents as primary work product", () => {
     const response = buildIssueDeliverables({
       issue: {
         id: "issue-1",
@@ -145,7 +145,7 @@ describe("buildIssueDeliverables", () => {
 
     expect(response.summary.documentCount).toBe(2);
     expect(response.documents[0]?.documentKey).toBe("plan");
-    expect(response.primaryItem?.title).toBe("Weekly report");
+    expect(response.primaryItem).toBeNull();
   });
 
   it("prefers explicit primary work products and merges artifacts with attachments into files", () => {
@@ -211,6 +211,66 @@ describe("buildIssueDeliverables", () => {
     expect(response.summary.fileCount).toBe(2);
     expect(response.workspace?.runtimeServiceCount).toBe(1);
     expect(response.workspace?.runtimeServiceHealth).toBe("healthy");
+  });
+
+  it("excludes comment attachments by default and includes them with operator context", () => {
+    const baseInput = {
+      issue: {
+        id: "issue-1",
+        projectId: "project-1",
+        description: null,
+        executionWorkspaceId: null,
+        createdAt: new Date("2026-04-01T12:00:00.000Z"),
+        updatedAt: new Date("2026-04-01T15:00:00.000Z"),
+      },
+      workspace: null,
+      workProducts: [],
+      documents: [],
+      legacyPlanDocument: null,
+      attachments: [
+        {
+          id: "attachment-output",
+          companyId: "company-1",
+          issueId: "issue-1",
+          issueCommentId: null,
+          assetId: "asset-1",
+          provider: "paperclip",
+          objectKey: "attachments/report.txt",
+          contentType: "text/plain",
+          byteSize: 512,
+          sha256: "abc",
+          originalFilename: "report.txt",
+          createdByAgentId: null,
+          createdByUserId: "user-1",
+          createdAt: new Date("2026-04-01T15:00:00.000Z"),
+          updatedAt: new Date("2026-04-01T15:00:00.000Z"),
+        },
+        {
+          id: "attachment-comment",
+          companyId: "company-1",
+          issueId: "issue-1",
+          issueCommentId: "comment-1",
+          assetId: "asset-2",
+          provider: "paperclip",
+          objectKey: "attachments/chat-screenshot.png",
+          contentType: "image/png",
+          byteSize: 1024,
+          sha256: "def",
+          originalFilename: "chat-screenshot.png",
+          createdByAgentId: null,
+          createdByUserId: "user-1",
+          createdAt: new Date("2026-04-01T16:00:00.000Z"),
+          updatedAt: new Date("2026-04-01T16:00:00.000Z"),
+        },
+      ],
+    };
+
+    const defaultResponse = buildIssueDeliverables(baseInput);
+    expect(defaultResponse.files.map((item) => item.id)).toEqual(["attachment-output"]);
+
+    const operatorResponse = buildIssueDeliverables({ ...baseInput, includeOperatorContext: true });
+    expect(operatorResponse.files.map((item) => item.id)).toEqual(["attachment-comment", "attachment-output"]);
+    expect(operatorResponse.files.find((item) => item.id === "attachment-comment")?.isOperatorContext).toBe(true);
   });
 });
 
@@ -291,10 +351,53 @@ describe("buildCompanyDeliverables", () => {
     expect(response.summary.issueCount).toBe(2);
 
     const kinds = response.items.map((item) => item.kind);
-    expect(kinds).toEqual(["preview_url", "attachment", "document", "document"]);
+    expect(kinds).toEqual(["preview_url", "document", "document", "attachment"]);
 
     const legacyPlan = response.items.find((item): item is CompanyDeliverableItem => item.id === "legacy-plan:issue-1");
     expect(legacyPlan?.issueIdentifier).toBe("PAP-10");
     expect(legacyPlan?.issueTitle).toBe("Write launch plan");
+  });
+
+  it("excludes comment attachments from the company feed unless operator context is requested", () => {
+    const input = {
+      issues: [
+        {
+          id: "issue-1",
+          identifier: "PAP-10",
+          title: "Review screenshot",
+          status: "in_progress",
+          projectId: "project-1",
+          description: null,
+          createdAt: new Date("2026-04-01T09:00:00.000Z"),
+          updatedAt: new Date("2026-04-01T15:00:00.000Z"),
+        },
+      ],
+      workProducts: [],
+      documents: [],
+      attachments: [
+        {
+          id: "attachment-comment",
+          companyId: "company-1",
+          issueId: "issue-1",
+          issueCommentId: "comment-1",
+          assetId: "asset-1",
+          provider: "paperclip",
+          objectKey: "attachments/chat-screenshot.png",
+          contentType: "image/png",
+          byteSize: 1024,
+          sha256: "abc",
+          originalFilename: "chat-screenshot.png",
+          createdByAgentId: null,
+          createdByUserId: "user-1",
+          createdAt: new Date("2026-04-01T16:30:00.000Z"),
+          updatedAt: new Date("2026-04-01T16:30:00.000Z"),
+        },
+      ],
+    };
+
+    expect(buildCompanyDeliverables(input).summary.totalCount).toBe(0);
+    const response = buildCompanyDeliverables({ ...input, includeOperatorContext: true });
+    expect(response.items.map((item) => item.id)).toEqual(["attachment-comment"]);
+    expect(response.items[0]?.isOperatorContext).toBe(true);
   });
 });

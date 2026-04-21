@@ -25,9 +25,9 @@ describe("issuesApi.list", () => {
   });
 
   it("calls the deliverables endpoint for an issue", async () => {
-    await issuesApi.getDeliverables("issue-1");
+    await issuesApi.getDeliverables("issue-1", { includeOperatorContext: true });
 
-    expect(mockApi.get).toHaveBeenCalledWith("/issues/issue-1/deliverables");
+    expect(mockApi.get).toHaveBeenCalledWith("/issues/issue-1/deliverables?includeOperatorContext=true");
   });
 
   it("calls the company work products endpoint with filters", async () => {
@@ -39,8 +39,8 @@ describe("issuesApi.list", () => {
   });
 
   it("calls the company deliverables endpoint", async () => {
-    await issuesApi.listCompanyDeliverables("company-1");
+    await issuesApi.listCompanyDeliverables("company-1", { includeOperatorContext: true });
 
-    expect(mockApi.get).toHaveBeenCalledWith("/companies/company-1/deliverables");
+    expect(mockApi.get).toHaveBeenCalledWith("/companies/company-1/deliverables?includeOperatorContext=true");
   });
 });
