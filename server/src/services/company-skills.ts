@@ -27,13 +27,11 @@ import type {
   CompanySkillUsageAgent,
 } from "@paperclipai/shared";
 import { normalizeAgentUrlKey } from "@paperclipai/shared";
-import { findActiveServerAdapter } from "../adapters/index.js";
 import { resolvePaperclipInstanceRoot } from "../home-paths.js";
 import { notFound, unprocessable } from "../errors.js";
 import { ghFetch, gitHubApiBase, resolveRawGitHubUrl } from "./github-fetch.js";
 import { agentService } from "./agents.js";
 import { projectService } from "./projects.js";
-import { secretService } from "./secrets.js";
 
 type CompanySkillRow = typeof companySkills.$inferSelect;
 type CompanySkillListDbRow = Pick<
@@ -1523,7 +1521,6 @@ function toCompanySkillListItem(skill: CompanySkillListRow, attachedAgentCount: 
 export function companySkillService(db: Db) {
   const agents = agentService(db);
   const projects = projectService(db);
-  const secretsSvc = secretService(db);
 
   async function ensureBundledSkills(companyId: string) {
     for (const skillsRoot of resolveBundledSkillsRoot()) {
@@ -1661,46 +1658,14 @@ export function companySkillService(db: Db) {
       return desiredSkills.includes(key);
     });
 
-    return Promise.all(
-      desiredAgents.map(async (agent) => {
-        const adapter = findActiveServerAdapter(agent.adapterType);
-        let actualState: string | null = null;
-
-        if (!adapter?.listSkills) {
-          actualState = "unsupported";
-        } else {
-          try {
-            const { config: runtimeConfig } = await secretsSvc.resolveAdapterConfigForRuntime(
-              agent.companyId,
-              agent.adapterConfig as Record<string, unknown>,
-            );
-            const runtimeSkillEntries = await listRuntimeSkillEntries(agent.companyId);
-            const snapshot = await adapter.listSkills({
-              agentId: agent.id,
-              companyId: agent.companyId,
-              adapterType: agent.adapterType,
-              config: {
-                ...runtimeConfig,
-                paperclipRuntimeSkills: runtimeSkillEntries,
-              },
-            });
-            actualState = snapshot.entries.find((entry) => entry.key === key)?.state
-              ?? (snapshot.supported ? "missing" : "unsupported");
-          } catch {
-            actualState = "unknown";
-          }
-        }
-
-        return {
-          id: agent.id,
-          name: agent.name,
-          urlKey: agent.urlKey,
-          adapterType: agent.adapterType,
-          desired: true,
-          actualState,
-        };
-      }),
-    );
+    return desiredAgents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      urlKey: agent.urlKey,
+      adapterType: agent.adapterType,
+      desired: true,
+      actualState: null,
+    }));
   }
 
   async function detail(companyId: string, id: string): Promise<CompanySkillDetail | null> {
