@@ -881,8 +881,6 @@ describe("IssueChatThread", () => {
 
     const spacer = container.querySelector('[data-testid="issue-chat-bottom-spacer"]');
     expect(spacer).toBeNull();
-=======
->>>>>>> Tune floating reply composer padding, offset, and initial height
 
     act(() => {
       root.unmount();

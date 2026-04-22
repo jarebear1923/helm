@@ -2555,7 +2555,6 @@ export function IssueChatThread({
       spacerInitialReserveRef.current = 0;
     }
   }, [messages]);
-
   useLayoutEffect(() => {
     const composerElement = composerViewportAnchorRef.current;
     if (preserveComposerViewportRef.current) {
