@@ -285,3 +285,57 @@ The single wide chart at full content width feels thin with surrounding whitespa
 - Narrow the chart to ~65% width with another meaningful module alongside (e.g., a summary-metrics card or small KPI strip).
 
 Filed here so Phase 4 doesn't forget the observation.
+
+---
+
+## Phase 3c — Priority affordance
+
+Wired the existing `PriorityIcon` popover picker into the in-flight tasks list. Click the priority icon on any row → 4-option popover → pick → row updates optimistically and may reposition per the priority-DESC sort.
+
+### Decisions
+
+- **Reused existing `PriorityIcon` component.** It already implements the full picker: `onChange` prop turns the icon into a shadcn `Popover` trigger that opens with 4 `<Button>` options, each highlighted with its own `PriorityIcon`. Keyboard-accessible (Tab between options, Enter picks, Escape closes) via shadcn + Radix defaults. Zero component invention, zero scope creep.
+  - *Lens — Reach for what exists first:* the operating principle that maps directly to the DS-discipline decision point; the component fits, so it's used.
+  - *Lens — Jakob's Law:* the picker behavior matches `IssueDetail.tsx:2325` and `IssueProperties.tsx:1068`, so users who've changed priority elsewhere recognize the pattern here.
+
+- **Optimistic update scoped to the dashboard's query cache.** The mutation targets `[...queryKeys.issues.list(companyId), "participant-agent", agentId]` only — the specific cache slice that feeds `assignedIssues` → `inFlightTasks`. On success, invalidates the full `queryKeys.issues.list(companyId)` prefix so any other dependent view (if open) refreshes. Lighter than `IssueDetail`'s full `applyOptimisticIssueCacheUpdate` because the dashboard doesn't need to maintain per-issue detail caches.
+
+- **Row reposition via existing sort memo.** The `inFlightTasks` useMemo already sorts by priority-DESC then updatedAt-DESC. When the optimistic cache update mutates an issue's priority, the memo recomputes and the row lands in its new bucket. No explicit animation framework — just React re-render.
+  - *Lens — Doherty Threshold:* optimistic updates put the visible change <100ms from the click, well inside the 400ms threshold.
+  - *Lens — Causality (Norman / purposeful animation):* the reposition *is* the feedback that the priority change succeeded. Combined with the highlight flash (below), the user sees "I clicked, priority flipped, row moved, row glowed."
+
+- **Highlight flash on the changed row.** After picking a new priority, the row shows a 1000ms `bg-accent/30` highlight via local `recentlyChangedId` state. `transition-colors` (already on `EntityRow`) fades the color in and out. When the row repositions, the highlight travels with it — reinforces that the repositioned row is the one that was just edited.
+  - *Lens — Zeigarnik / Goal-Gradient:* the brief highlight "closes the loop" on the priority-change action, giving visible completion.
+  - *Lens — Aesthetic-Usability Effect:* 1000ms is enough to register, short enough not to feel like a modal interruption. Using `bg-accent/30` (existing DS token, same as `hover:bg-accent/50` one step brighter) keeps the decoration quiet.
+
+- **Click-stopper wrapper around `PriorityIcon` inside `EntityRow`.** The `EntityRow` renders as a `<Link>` when `to` is passed; the `PriorityIcon` popover trigger sits inside that Link. Without intervention, clicking the priority icon would also trigger Link navigation. Wrapped the icon in a `<span>` with `onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}` and `onKeyDown` that stops Enter/Space bubbling. Click stays inside the popover trigger; keyboard Enter on the focused trigger doesn't leak to the Link.
+
+- **No client-side permission gate.** Matches the existing `IssueDetail.tsx` pattern (priority changes flow through `updateIssue.mutate` without a client-side role check). If a user lacks server-side permission, the mutation will error and `onError` pushes an error toast with the server message. Flagging: **this matches the existing app behavior but isn't defensive.** If a product decision wants dashboard-specific gating, that's a new requirement — not something Phase 3c invents silently.
+
+- **Error handling.** `onError` restores the previous cache snapshot (cached in `onMutate`'s return) and pushes a shadcn toast with the server error message or a default "Could not save priority." Users see both the row reverting and an explanation. `onSettled` unconditionally invalidates the issues list so the UI converges on server state after any error.
+
+### Rubric alignment
+
+- **Section 3, Change task priority:** pass. Explicit selector on each of up to 7 in-flight task rows, scoped to the 4-value `critical | high | medium | low` enum. Keyboard-navigable, satisfies the "drag-and-drop or keyboard-reorderable" rubric item via the keyboard path cleanly.
+- **Section 2, Operations:** pass. Teammates can change priority from the dashboard without leaving the page; mutation is scoped to this specific view.
+- **Section 3, Navigate to detail:** unchanged — clicking anywhere else on the row still routes to `/issues/{identifier}`.
+
+### DS deviations — "pass with explicit justification"
+
+- **`PopoverContent` uses `rounded-md`** (inherited from shadcn's primitive). The dashboard aesthetic prefers `rounded-none`, but shadcn primitives are an accepted exemption per Step 0 DS policy. Overriding would require a local className override on every popover usage across the codebase — not scoped to Phase 3c. Same treatment applies to `Button` inside the popover (likely `rounded-md` from shadcn Button variants). Noted as inherited, not introduced.
+- **`bg-accent/30` for the highlight flash.** `bg-accent` is an existing DS token; `/30` opacity is standard Tailwind modifier syntax. No new token, no new raw-palette drift.
+
+### Findings surfaced
+
+- **Nested-interactive DOM.** `<Link>` > `<PopoverTrigger as button>` is a known a11y warning pattern (nested interactive elements). Screen readers announce both elements; users can still operate both via keyboard (focus the outer Link, Tab to the inner trigger). The existing `EntityRow` component assumes this pattern is acceptable given its `to`-prop contract. **Not fixed in Phase 3c** — the cleanest fix would restructure the row to not wrap the whole thing in a Link (title becomes the only Link; hover affordance moves to a shared `group-hover` class), which is a wider EntityRow refactor. Filed as a Phase 4 candidate if someone cares.
+- **Tab order inside the popover is sequential, not menu-like.** `Popover` + shadcn `Button` children support Tab/Shift-Tab navigation between options. Arrow keys don't navigate like a `DropdownMenu` would. The concept said "arrow keys or Tab" — Tab satisfies. For a richer keyboard UX (arrows navigate options), swap `Popover` for `DropdownMenu` — but that'd require modifying `PriorityIcon`, a shared component, touching `IssueDetail` + `IssueProperties` + this page simultaneously. Out of scope.
+- **Permission model mirrors app pattern, which is "anyone who can view can edit."** If product wants tighter gating, it needs a dedicated decision + a server-side permission check. Out of scope here; flagging for product awareness.
+
+### Test coverage
+
+Existing `ActivityCharts.test.tsx` still passes (2 tests). No new tests added — no new component to test; `PriorityIcon` has its own test coverage in the project.
+
+### Residual items for Phase 3d / 4
+
+- Costs module (Phase 3d) may surface the overall page rhythm tradeoffs that inform the "chart sparseness" deferred item.
+- Nested-interactive a11y pattern on the in-flight row — flagged above, filed for Phase 4 consideration.

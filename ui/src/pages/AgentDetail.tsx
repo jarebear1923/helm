@@ -90,6 +90,8 @@ import {
   type HeartbeatRun,
   type HeartbeatRunEvent,
   type AgentRuntimeState,
+  type Issue,
+  type IssuePriority,
   type LiveEvent,
   type WorkspaceOperation,
 } from "@paperclipai/shared";
@@ -629,6 +631,7 @@ export function AgentDetail() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { pushToast } = useToastActions();
   const [actionError, setActionError] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const activeView = urlRunId ? "runs" as AgentDetailView : parseAgentDetailView(urlTab ?? null);
@@ -851,6 +854,39 @@ export function AgentDetail() {
     },
     onError: (err) => {
       setActionError(err instanceof Error ? err.message : "Failed to update permissions");
+    },
+  });
+
+  const updatePriority = useMutation({
+    mutationFn: ({ id, priority }: { id: string; priority: IssuePriority }) =>
+      issuesApi.update(id, { priority }),
+    onMutate: async ({ id, priority }) => {
+      if (!resolvedCompanyId || !resolvedAgentId) return;
+      const queryKey = [...queryKeys.issues.list(resolvedCompanyId), "participant-agent", resolvedAgentId] as const;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Issue[]>(queryKey);
+      if (previous) {
+        queryClient.setQueryData<Issue[]>(
+          queryKey,
+          previous.map((issue) => (issue.id === id ? { ...issue, priority } : issue)),
+        );
+      }
+      return { queryKey, previous };
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.previous && ctx.queryKey) {
+        queryClient.setQueryData(ctx.queryKey, ctx.previous);
+      }
+      pushToast({
+        title: "Priority update failed",
+        body: err instanceof Error ? err.message : "Could not save priority",
+        tone: "error",
+      });
+    },
+    onSettled: () => {
+      if (resolvedCompanyId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(resolvedCompanyId) });
+      }
     },
   });
 
@@ -1098,6 +1134,7 @@ export function AgentDetail() {
           agentId={agent.id}
           agentRouteId={canonicalAgentRef}
           budgetSummary={agentBudgetSummary}
+          onPriorityChange={(id, priority) => updatePriority.mutate({ id, priority: priority as IssuePriority })}
         />
       )}
 
@@ -1249,6 +1286,7 @@ function AgentOverview({
   agentId,
   agentRouteId,
   budgetSummary,
+  onPriorityChange,
 }: {
   agent: AgentDetailRecord;
   runs: HeartbeatRun[];
@@ -1257,7 +1295,16 @@ function AgentOverview({
   agentId: string;
   agentRouteId: string;
   budgetSummary?: BudgetPolicySummary;
+  onPriorityChange?: (issueId: string, priority: string) => void;
 }) {
+  const [recentlyChangedId, setRecentlyChangedId] = useState<string | null>(null);
+  const handlePriorityChange = (issueId: string, priority: string) => {
+    onPriorityChange?.(issueId, priority);
+    setRecentlyChangedId(issueId);
+    window.setTimeout(() => {
+      setRecentlyChangedId((curr) => (curr === issueId ? null : curr));
+    }, 1000);
+  };
   const inFlightTasks = useMemo(() => {
     return assignedIssues
       .filter((issue) => IN_FLIGHT_ISSUE_STATUSES.has(issue.status))
@@ -1449,11 +1496,22 @@ function AgentOverview({
             {inFlightTasks.slice(0, 7).map((issue) => (
               <EntityRow
                 key={issue.id}
-                leading={<PriorityIcon priority={issue.priority} />}
+                leading={
+                  <span
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
+                  >
+                    <PriorityIcon
+                      priority={issue.priority}
+                      onChange={onPriorityChange ? (p) => handlePriorityChange(issue.id, p) : undefined}
+                    />
+                  </span>
+                }
                 identifier={issue.identifier ?? issue.id.slice(0, 8)}
                 title={issue.title}
                 to={`/issues/${issue.identifier ?? issue.id}`}
                 trailing={<StatusBadge status={issue.status} />}
+                className={cn(recentlyChangedId === issue.id && "bg-accent/30")}
               />
             ))}
             {inFlightTasks.length > 7 && (
