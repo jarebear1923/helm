@@ -2,7 +2,7 @@
 
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import type { ReactNode } from "react";
+import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Issue } from "@paperclipai/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -48,6 +48,22 @@ vi.mock("../context/CompanyContext", () => ({
 
 vi.mock("../context/DialogContext", () => ({
   useDialog: () => dialogState,
+}));
+
+vi.mock("@/lib/router", () => ({
+  Link: ({
+    children,
+    to,
+    state: _state,
+    issuePrefetch: _issuePrefetch,
+    ...props
+  }: AnchorHTMLAttributes<HTMLAnchorElement> & {
+    to: string;
+    state?: unknown;
+    issuePrefetch?: unknown;
+  }) => (
+    <a href={to} {...props}>{children}</a>
+  ),
 }));
 
 vi.mock("../api/issues", () => ({
@@ -343,6 +359,128 @@ describe("IssuesList", () => {
     expect(dialogState.openNewIssue).toHaveBeenCalledWith({
       parentId: "parent-1",
       projectId: "project-1",
+    });
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("renders the opt-in sub-issue progress summary with workflow next-up linking", async () => {
+    const doneIssue = createIssue({
+      id: "issue-done",
+      identifier: "PAP-1",
+      title: "Completed setup",
+      status: "done",
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+    });
+    const nextIssue = createIssue({
+      id: "issue-next",
+      identifier: "PAP-2",
+      title: "Implement next slice",
+      status: "todo",
+      createdAt: new Date("2026-04-02T00:00:00.000Z"),
+      blockedBy: [{
+        id: "issue-done",
+        identifier: "PAP-1",
+        title: "Completed setup",
+        status: "done",
+        priority: "medium",
+        assigneeAgentId: null,
+        assigneeUserId: null,
+      }],
+    });
+    const blockedIssue = createIssue({
+      id: "issue-blocked",
+      identifier: "PAP-3",
+      title: "Blocked follow-up",
+      status: "blocked",
+      createdAt: new Date("2026-04-03T00:00:00.000Z"),
+    });
+
+    const { root } = renderWithQueryClient(
+      <IssuesList
+        issues={[blockedIssue, nextIssue, doneIssue]}
+        agents={[]}
+        projects={[]}
+        viewStateKey="paperclip:test-issues"
+        showProgressSummary
+        onUpdateIssue={() => undefined}
+      />,
+      container,
+    );
+
+    await waitForAssertion(() => {
+      const progress = container.querySelector('[role="progressbar"]');
+      expect(progress).not.toBeNull();
+      expect(progress?.getAttribute("aria-valuenow")).toBe("1");
+      expect(progress?.getAttribute("aria-valuemax")).toBe("3");
+      expect(container.textContent).toContain("1/3 done");
+      expect(container.textContent).toContain("0 in progress");
+      expect(container.textContent).toContain("1 blocked");
+      expect(container.textContent).toContain("Next up");
+      const link = container.querySelector('a[href="/issues/PAP-2"]');
+      expect(link?.textContent).toContain("Implement next slice");
+    });
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("hides the sub-issue progress summary unless it is enabled and populated", async () => {
+    const { root } = renderWithQueryClient(
+      <IssuesList
+        issues={[createIssue()]}
+        agents={[]}
+        projects={[]}
+        viewStateKey="paperclip:test-issues"
+        onUpdateIssue={() => undefined}
+      />,
+      container,
+    );
+
+    await waitForAssertion(() => {
+      expect(container.querySelector('[role="progressbar"]')).toBeNull();
+    });
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("shows waiting on blockers when every remaining sub-issue is blocked", async () => {
+    const { root } = renderWithQueryClient(
+      <IssuesList
+        issues={[
+          createIssue({
+            id: "issue-done",
+            identifier: "PAP-1",
+            title: "Completed setup",
+            status: "done",
+            createdAt: new Date("2026-04-01T00:00:00.000Z"),
+          }),
+          createIssue({
+            id: "issue-blocked",
+            identifier: "PAP-2",
+            title: "Blocked follow-up",
+            status: "blocked",
+            createdAt: new Date("2026-04-02T00:00:00.000Z"),
+          }),
+        ]}
+        agents={[]}
+        projects={[]}
+        viewStateKey="paperclip:test-issues"
+        showProgressSummary
+        onUpdateIssue={() => undefined}
+      />,
+      container,
+    );
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain("Waiting on blockers");
+      const link = container.querySelector('a[href="/issues/PAP-2"]');
+      expect(link?.textContent).toContain("Blocked follow-up");
     });
 
     act(() => {

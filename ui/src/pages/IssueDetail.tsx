@@ -3159,6 +3159,8 @@ export function IssueDetail() {
             searchWithinLoadedIssues
             baseCreateIssueDefaults={buildSubIssueDefaultsForViewer(issue, currentUserId)}
             createIssueLabel="Sub-issue"
+            defaultSortField="workflow"
+            showProgressSummary
             onUpdateIssue={handleChildIssueUpdate}
           />
         </div>
