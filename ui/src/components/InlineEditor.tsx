@@ -61,6 +61,7 @@ export function InlineEditor({
   const markdownRef = useRef<MarkdownEditorRef>(null);
   const autosaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blurCommitFrameRef = useRef<(() => void) | null>(null);
+  const pendingFocusFrameRef = useRef<number | null>(null);
   const justEnteredEditRef = useRef(false);
   const hasBeenFocusedRef = useRef(false);
   const {
@@ -90,6 +91,10 @@ export function InlineEditor({
         blurCommitFrameRef.current();
         blurCommitFrameRef.current = null;
       }
+      if (pendingFocusFrameRef.current !== null) {
+        cancelAnimationFrame(pendingFocusFrameRef.current);
+        pendingFocusFrameRef.current = null;
+      }
     };
   }, []);
 
@@ -113,7 +118,19 @@ export function InlineEditor({
     if (!multilineEditing || !multiline) return;
     if (!justEnteredEditRef.current) return;
     justEnteredEditRef.current = false;
-    markdownRef.current?.focus();
+    if (pendingFocusFrameRef.current !== null) {
+      cancelAnimationFrame(pendingFocusFrameRef.current);
+    }
+    pendingFocusFrameRef.current = requestAnimationFrame(() => {
+      pendingFocusFrameRef.current = null;
+      markdownRef.current?.focus();
+    });
+    return () => {
+      if (pendingFocusFrameRef.current !== null) {
+        cancelAnimationFrame(pendingFocusFrameRef.current);
+        pendingFocusFrameRef.current = null;
+      }
+    };
   }, [multilineEditing, multiline]);
 
   // Once the editor has been focused at least once, it's blurred, and any
@@ -233,7 +250,8 @@ export function InlineEditor({
   }, [autosaveState, commit, draft, markDirty, multiline, multilineFocused, nullable, reset, runSave, value]);
 
   if (multiline) {
-    const hasValue = Boolean(value.trim());
+    const previewValue = autosaveState === "saved" ? draft : value;
+    const hasValue = Boolean(previewValue.trim());
     const showEditor = multilineEditing || multilineFocused || !hasValue;
 
     if (!showEditor) {
@@ -282,6 +300,10 @@ export function InlineEditor({
         }}
         onBlurCapture={(event) => {
           if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          if (pendingFocusFrameRef.current !== null) {
+            cancelAnimationFrame(pendingFocusFrameRef.current);
+            pendingFocusFrameRef.current = null;
+          }
           scheduleBlurCommit(event.currentTarget);
         }}
         onKeyDown={handleKeyDown}
