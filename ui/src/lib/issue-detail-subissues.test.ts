@@ -53,6 +53,7 @@ describe("buildSubIssueProgressSummary", () => {
       issue("1", "done", "2026-04-01T00:00:00.000Z"),
       issue("2", "in_progress", "2026-04-02T00:00:00.000Z", ["1"]),
       issue("4", "blocked", "2026-04-04T00:00:00.000Z"),
+      issue("5", "cancelled", "2026-04-05T00:00:00.000Z"),
     ]);
 
     expect(summary.totalCount).toBe(4);
@@ -60,6 +61,7 @@ describe("buildSubIssueProgressSummary", () => {
     expect(summary.inProgressCount).toBe(1);
     expect(summary.blockedCount).toBe(1);
     expect(summary.countsByStatus.todo).toBe(1);
+    expect(summary.countsByStatus.cancelled).toBeUndefined();
     expect(summary.target?.kind).toBe("next");
     expect(summary.target?.issue.id).toBe("2");
   });

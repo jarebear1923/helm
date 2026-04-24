@@ -27,11 +27,12 @@ export function shouldRenderSubIssueProgressSummary(enabled: boolean | undefined
 
 export function buildSubIssueProgressSummary(issues: Issue[]): SubIssueProgressSummary {
   const countsByStatus: Partial<Record<IssueStatus, number>> = {};
-  for (const issue of issues) {
+  const progressIssues = issues.filter((issue) => issue.status !== "cancelled");
+  for (const issue of progressIssues) {
     countsByStatus[issue.status] = (countsByStatus[issue.status] ?? 0) + 1;
   }
 
-  const orderedIssues = workflowSort(issues);
+  const orderedIssues = workflowSort(progressIssues);
   const nextIssue = orderedIssues.find((issue) => isActionableStatus(issue.status)) ?? null;
   const remainingIssues = orderedIssues.filter((issue) => !isTerminalStatus(issue.status));
   const blockedIssue =
@@ -40,7 +41,7 @@ export function buildSubIssueProgressSummary(issues: Issue[]): SubIssueProgressS
       : null;
 
   return {
-    totalCount: issues.length,
+    totalCount: progressIssues.length,
     doneCount: countsByStatus.done ?? 0,
     inProgressCount: countsByStatus.in_progress ?? 0,
     blockedCount: countsByStatus.blocked ?? 0,

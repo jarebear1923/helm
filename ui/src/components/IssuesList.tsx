@@ -240,6 +240,35 @@ function isActionableWorkflowStatus(status: IssueStatus): boolean {
   return status !== "done" && status !== "cancelled" && status !== "blocked";
 }
 
+function buildChecklistStepNumberMap(issues: Issue[], nestingEnabled: boolean): Map<string, string> {
+  const stepNumberByIssueId = new Map<string, string>();
+
+  if (!nestingEnabled) {
+    issues.forEach((issue, index) => {
+      stepNumberByIssueId.set(issue.id, String(index + 1));
+    });
+    return stepNumberByIssueId;
+  }
+
+  const { roots, childMap } = buildIssueTree(issues);
+  const visit = (siblings: Issue[], prefix: string | null) => {
+    siblings.forEach((issue, index) => {
+      const stepNumber = prefix ? `${prefix}.${index + 1}` : String(index + 1);
+      stepNumberByIssueId.set(issue.id, stepNumber);
+      visit(childMap.get(issue.id) ?? [], stepNumber);
+    });
+  };
+  visit(roots, null);
+
+  issues.forEach((issue, index) => {
+    if (!stepNumberByIssueId.has(issue.id)) {
+      stepNumberByIssueId.set(issue.id, String(index + 1));
+    }
+  });
+
+  return stepNumberByIssueId;
+}
+
 /* ── Component ── */
 
 interface Agent {
@@ -413,6 +442,8 @@ function SubIssueProgressSummaryStrip({
                 <span>{targetIssue.title}</span>
               </Link>
             </>
+          ) : summary.totalCount === 0 ? (
+            <div className="text-sm font-medium text-foreground">No active sub-issues</div>
           ) : summary.doneCount === summary.totalCount ? (
             <div className="text-sm font-medium text-foreground">All sub-issues done</div>
           ) : (
@@ -825,11 +856,10 @@ export function IssuesList({
     if (!checklistAffordanceEnabled) return null;
 
     const visibleIssueIds = new Set(filtered.map((issue) => issue.id));
-    const stepNumberByIssueId = new Map<string, number>();
+    const stepNumberByIssueId = buildChecklistStepNumberMap(filtered, viewState.nestingEnabled);
     const unresolvedVisibleBlockersByIssueId = new Map<string, string[]>();
 
-    filtered.forEach((issue, index) => {
-      stepNumberByIssueId.set(issue.id, index + 1);
+    filtered.forEach((issue) => {
       const unresolvedVisible = (issue.blockedBy ?? [])
         .map((blocker) => blocker.id)
         .filter((blockerId) => {
@@ -849,7 +879,7 @@ export function IssuesList({
       unresolvedVisibleBlockersByIssueId,
       currentStepIssueId: currentStepIssue?.id ?? null,
     };
-  }, [checklistAffordanceEnabled, filtered, issueById]);
+  }, [checklistAffordanceEnabled, filtered, issueById, viewState.nestingEnabled]);
 
   const { data: labels } = useQuery({
     queryKey: queryKeys.issues.labels(selectedCompanyId!),

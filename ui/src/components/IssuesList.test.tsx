@@ -101,7 +101,7 @@ vi.mock("./IssueRow", () => ({
     desktopMetaLeading?: ReactNode;
     desktopTrailing?: ReactNode;
     titleClassName?: string;
-    checklistStepNumber?: number | null;
+    checklistStepNumber?: number | string | null;
     checklistCurrentStep?: boolean;
     checklistDependencyChips?: ReactNode;
     checklistRowId?: string;
@@ -414,10 +414,17 @@ describe("IssuesList", () => {
       status: "blocked",
       createdAt: new Date("2026-04-03T00:00:00.000Z"),
     });
+    const cancelledIssue = createIssue({
+      id: "issue-cancelled",
+      identifier: "PAP-4",
+      title: "Cancelled follow-up",
+      status: "cancelled",
+      createdAt: new Date("2026-04-04T00:00:00.000Z"),
+    });
 
     const { root } = renderWithQueryClient(
       <IssuesList
-        issues={[blockedIssue, nextIssue, doneIssue]}
+        issues={[cancelledIssue, blockedIssue, nextIssue, doneIssue]}
         agents={[]}
         projects={[]}
         viewStateKey="paperclip:test-issues"
@@ -439,6 +446,7 @@ describe("IssuesList", () => {
       expect(container.textContent).toContain("Next up");
       const link = container.querySelector('a[href="/issues/PAP-2"]');
       expect(link?.textContent).toContain("Implement next slice");
+      expect(container.querySelector('[title="Cancelled: 1"]')).toBeNull();
     });
 
     act(() => {
@@ -490,6 +498,66 @@ describe("IssuesList", () => {
       expect(rows.find((row) => row.textContent?.includes("Active blocker"))?.getAttribute("data-current-step")).toBe("true");
       expect(rows.find((row) => row.textContent?.includes("Done first"))?.getAttribute("data-title-class")).toContain("text-muted-foreground");
       expect(container.textContent).toContain("blocked by PAP-3 · step 2");
+    });
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("uses hierarchical checklist step numbers when nested rows render inline", async () => {
+    const firstRoot = createIssue({
+      id: "issue-first-root",
+      identifier: "PAP-1",
+      title: "First root",
+      status: "done",
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+    });
+    const parent = createIssue({
+      id: "issue-parent",
+      identifier: "PAP-2",
+      title: "Parent slice",
+      status: "todo",
+      createdAt: new Date("2026-04-02T00:00:00.000Z"),
+    });
+    const nextRoot = createIssue({
+      id: "issue-next-root",
+      identifier: "PAP-3",
+      title: "Next root",
+      status: "todo",
+      createdAt: new Date("2026-04-03T00:00:00.000Z"),
+    });
+    const grandchild = createIssue({
+      id: "issue-grandchild",
+      identifier: "PAP-4",
+      title: "Nested cancelled cleanup",
+      status: "cancelled",
+      parentId: "issue-parent",
+      createdAt: new Date("2026-04-04T00:00:00.000Z"),
+    });
+
+    const { root } = renderWithQueryClient(
+      <IssuesList
+        issues={[grandchild, nextRoot, firstRoot, parent]}
+        agents={[]}
+        projects={[]}
+        viewStateKey="paperclip:test-issues"
+        defaultSortField="workflow"
+        onUpdateIssue={() => undefined}
+      />,
+      container,
+    );
+
+    await waitForAssertion(() => {
+      const rows = Array.from(container.querySelectorAll('[data-testid="issue-row"]'));
+      expect(rows).toHaveLength(4);
+      expect(rows.map((row) => row.textContent)).toEqual([
+        expect.stringContaining("First root"),
+        expect.stringContaining("Parent slice"),
+        expect.stringContaining("Nested cancelled cleanup"),
+        expect.stringContaining("Next root"),
+      ]);
+      expect(rows.map((row) => row.getAttribute("data-step"))).toEqual(["1", "2", "2.1", "3"]);
     });
 
     act(() => {

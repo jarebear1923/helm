@@ -24,7 +24,7 @@ interface IssueRowProps {
   trailingMeta?: ReactNode;
   titleSuffix?: ReactNode;
   titleClassName?: string;
-  checklistStepNumber?: number | null;
+  checklistStepNumber?: number | string | null;
   checklistCurrentStep?: boolean;
   checklistDependencyChips?: ReactNode;
   checklistRowId?: string;
@@ -84,7 +84,7 @@ export function IssueRow({
     >
       {hasChecklistStep ? (
         <span
-          className="inline-block w-4 shrink-0 self-center text-right font-mono text-[10px] text-muted-foreground sm:w-8 sm:text-xs"
+          className="inline-block w-7 shrink-0 self-center text-right font-mono text-[10px] text-muted-foreground sm:w-10 sm:text-xs"
           aria-hidden="true"
         >
           {checklistStepNumber}.
