@@ -928,7 +928,9 @@ describe("IssueChatThread", () => {
     });
 
     expect(onAttachImage).toHaveBeenCalledWith(file);
-    expect(container.querySelector('[data-testid="issue-chat-composer-attachments"]')).not.toBeNull();
+    const attachmentList = container.querySelector('[data-testid="issue-chat-composer-attachments"]');
+    expect(attachmentList).not.toBeNull();
+    expect(attachmentList?.className).toContain("mb-3");
     expect(container.textContent).toContain("report.pdf");
     expect(container.textContent).toContain("Attached to issue");
 
