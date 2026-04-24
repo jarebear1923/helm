@@ -272,9 +272,15 @@ export function InlineEditor({
             enterEditMode();
           }}
           onDragEnter={() => enterEditMode()}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            enterEditMode();
+          }}
           role="textbox"
           aria-multiline="true"
           aria-label={placeholder}
+          tabIndex={0}
         >
           <MarkdownBody className={cn("paperclip-edit-in-place-content", className)}>
             {previewValue}

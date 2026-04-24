@@ -218,6 +218,30 @@ describe("InlineEditor", () => {
     const preview = container.querySelector<HTMLElement>('[role="textbox"]');
     expect(preview).not.toBeNull();
     expect(preview?.getAttribute("aria-multiline")).toBe("true");
+    expect(preview?.tabIndex).toBe(0);
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("enters multiline edit mode from the keyboard preview surface", () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(<InlineEditor value="Hello world" multiline onSave={onSave} />);
+    });
+
+    const preview = container.querySelector<HTMLElement>('[role="textbox"]');
+    expect(preview).not.toBeNull();
+
+    act(() => {
+      preview!.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+    });
+
+    expect(container.querySelector('[data-testid="multiline-md-mock"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="multiline-md-preview"]')).toBeNull();
 
     act(() => {
       root.unmount();
