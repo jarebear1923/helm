@@ -1412,6 +1412,7 @@ export function IssuesList({
                               isLive={liveIssueIds?.has(issue.id) === true}
                               showStatus={visibleIssueColumnSet.has("status") && availableIssueColumnSet.has("status")}
                               showIdentifier={visibleIssueColumnSet.has("id") && availableIssueColumnSet.has("id")}
+                              checklistStepNumber={checklistStepNumber}
                               statusSlot={(
                                 <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
                                   <StatusIcon status={issue.status} blockerAttention={issue.blockerAttention} onChange={(s) => onUpdateIssue(issue.id, { status: s })} />

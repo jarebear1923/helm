@@ -494,6 +494,8 @@ describe("IssuesList", () => {
       const rows = Array.from(container.querySelectorAll('[data-testid="issue-row"]'));
       expect(rows).toHaveLength(3);
       expect(rows.map((row) => row.getAttribute("data-step"))).toEqual(["1", "2", "3"]);
+      expect(container.textContent?.replace(/\s+/g, "")).toContain("1.PAP-1");
+      expect(container.textContent?.replace(/\s+/g, "")).toContain("2.PAP-3");
       expect(rows.filter((row) => row.getAttribute("data-current-step") === "true")).toHaveLength(1);
       expect(rows.find((row) => row.textContent?.includes("Active blocker"))?.getAttribute("data-current-step")).toBe("true");
       expect(rows.find((row) => row.textContent?.includes("Done first"))?.getAttribute("data-title-class")).toContain("text-muted-foreground");

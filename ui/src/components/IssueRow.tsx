@@ -64,6 +64,11 @@ export function IssueRow({
   const selectedStatusClass = selected ? "!text-muted-foreground !border-muted-foreground" : undefined;
   const detailState = withIssueDetailHeaderSeed(issueLinkState, issue);
   const hasChecklistStep = checklistStepNumber !== null;
+  const checklistStep = hasChecklistStep ? (
+    <span className="shrink-0 font-mono text-xs text-muted-foreground" aria-hidden="true">
+      {checklistStepNumber}.
+    </span>
+  ) : null;
 
   return (
     <Link
@@ -82,14 +87,6 @@ export function IssueRow({
         className,
       )}
     >
-      {hasChecklistStep ? (
-        <span
-          className="inline-block w-7 shrink-0 self-center text-right font-mono text-[10px] text-muted-foreground sm:w-10 sm:text-xs"
-          aria-hidden="true"
-        >
-          {checklistStepNumber}.
-        </span>
-      ) : null}
       <span className="shrink-0 pt-px sm:hidden">
         {mobileLeading ?? <StatusIcon status={issue.status} blockerAttention={issue.blockerAttention} className={selectedStatusClass} />}
       </span>
@@ -111,6 +108,7 @@ export function IssueRow({
               <span className="hidden shrink-0 sm:inline-flex">
                 <StatusIcon status={issue.status} blockerAttention={issue.blockerAttention} className={selectedStatusClass} />
               </span>
+              {checklistStep}
               <span className="shrink-0 font-mono text-xs text-muted-foreground">
                 {identifier}
               </span>
