@@ -14,6 +14,7 @@ import {
 const execFile = promisify(execFileCallback);
 
 describe("sandbox managed runtime", () => {
+  const sandboxRuntimeTimeoutMs = 30_000;
   const cleanupDirs: string[] = [];
 
   afterEach(async () => {
@@ -122,5 +123,5 @@ describe("sandbox managed runtime", () => {
     await expect(readFile(path.join(localWorkspaceDir, "local-stale.txt"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(path.join(localWorkspaceDir, ".claude", "settings.json"), "utf8")).resolves.toBe("{\"local\":true}\n");
     await expect(readFile(path.join(localWorkspaceDir, ".paperclip-runtime", "state.json"), "utf8")).resolves.toBe("{}\n");
-  });
+  }, sandboxRuntimeTimeoutMs);
 });

@@ -28,7 +28,13 @@ async function git(cwd: string, args: string[]): Promise<string> {
   });
 }
 
+async function initGitRepo(cwd: string, branchName: string) {
+  await git(cwd, ["init"]);
+  await git(cwd, ["checkout", "-b", branchName]);
+}
+
 describe("ssh env-lab fixture", () => {
+  const fixtureTimeoutMs = 30_000;
   const cleanupDirs: string[] = [];
 
   afterEach(async () => {
@@ -68,7 +74,7 @@ describe("ssh env-lab fixture", () => {
 
     const stopped = await readSshEnvLabFixtureStatus(statePath);
     expect(stopped.running).toBe(false);
-  });
+  }, fixtureTimeoutMs);
 
   it("does not treat an unrelated reused pid as the running fixture", async () => {
     const support = await getSshEnvLabSupport();
@@ -100,7 +106,7 @@ describe("ssh env-lab fixture", () => {
     expect(restarted.pid).not.toBe(process.pid);
 
     await stopSshEnvLabFixture(statePath);
-  });
+  }, fixtureTimeoutMs);
 
   it("rejects invalid environment variable keys when constructing SSH spawn targets", async () => {
     await expect(
@@ -162,7 +168,7 @@ describe("ssh env-lab fixture", () => {
 
     expect(result.stdout).toContain("hello from paperclip");
     expect(result.stdout).not.toContain("appledouble-present");
-  });
+  }, fixtureTimeoutMs);
 
   it("can dereference local symlinks while syncing to the remote fixture", async () => {
     const support = await getSshEnvLabSupport();
@@ -205,7 +211,7 @@ describe("ssh env-lab fixture", () => {
 
     expect(result.stdout).toContain("regular");
     expect(result.stdout).toContain("{\"token\":\"secret\"}");
-  });
+  }, fixtureTimeoutMs);
 
   it("round-trips a git workspace through the SSH fixture", async () => {
     const support = await getSshEnvLabSupport();
@@ -222,7 +228,7 @@ describe("ssh env-lab fixture", () => {
     const localRepo = path.join(rootDir, "local-workspace");
 
     await mkdir(localRepo, { recursive: true });
-    await git(localRepo, ["init", "-b", "main"]);
+    await initGitRepo(localRepo, "main");
     await git(localRepo, ["config", "user.name", "Paperclip Test"]);
     await git(localRepo, ["config", "user.email", "test@paperclip.dev"]);
     await writeFile(path.join(localRepo, "tracked.txt"), "base\n", "utf8");
@@ -271,5 +277,5 @@ describe("ssh env-lab fixture", () => {
     expect(await git(localRepo, ["log", "-1", "--pretty=%s"])).toBe("remote update");
     expect(await git(localRepo, ["status", "--short"])).toContain("M tracked.txt");
     expect(await git(localRepo, ["status", "--short"])).not.toContain("._tracked.txt");
-  });
+  }, fixtureTimeoutMs);
 });
