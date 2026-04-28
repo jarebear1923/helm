@@ -309,6 +309,12 @@ interface IssueChatThreadProps {
     answers: AskUserQuestionsAnswer[],
   ) => Promise<void> | void;
   composerRef?: Ref<IssueChatComposerHandle>;
+  /**
+   * Hook for the parent to refetch comments when the user explicitly asks
+   * to jump to the latest comment. Used to make sure the absolute newest
+   * comment is in the loaded set before we scroll to it.
+   */
+  onRefreshLatestComments?: () => Promise<unknown> | void;
 }
 
 type IssueChatErrorBoundaryProps = {
@@ -3082,6 +3088,7 @@ export function IssueChatThread({
   onRejectInteraction,
   onSubmitInteractionAnswers,
   composerRef,
+  onRefreshLatestComments,
 }: IssueChatThreadProps) {
   const location = useLocation();
   const lastScrolledHashRef = useRef<string | null>(null);
@@ -3341,25 +3348,76 @@ export function IssueChatThread({
     };
   }, [location.hash, messageAnchorIndex, messages, useVirtualizedThread]);
 
-  function handleJumpToLatest() {
-    // Prefer the latest comment row over whichever run/timeline row happens to
-    // sort last in the merged feed. Fall back to the trailing row when no
-    // comment row exists (run-only/embedded outputs).
-    const latestCommentIndex = findLatestCommentMessageIndex(messages);
-    if (latestCommentIndex >= 0) {
-      const latestCommentAnchor = issueChatMessageAnchorId(messages[latestCommentIndex]);
-      if (
-        latestCommentAnchor
-        && scrollToThreadAnchor(latestCommentAnchor, { align: "end", behavior: "smooth" })
-      ) {
-        return;
-      }
-    }
+  function jumpToLatestFallback() {
     if (useVirtualizedThread) {
       virtualizedThreadRef.current?.scrollToLatest({ behavior: "smooth" });
       return;
     }
     bottomAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  // Walks the thread by anchor and lands on the latest `comment-*` row, with
+  // a short series of settle passes. The virtualizer estimates row sizes for
+  // unmeasured rows, and that estimate undershoots tall markdown comments —
+  // so the first scroll often lands above the actual bottom and the user
+  // ends up clicking Jump to latest repeatedly to converge. Re-issuing the
+  // scroll after measurements catch up lets one click reach the actual
+  // latest comment (PAP-2672 follow-up).
+  function scrollToLatestCommentWithSettle() {
+    const latestCommentIndex = findLatestCommentMessageIndex(messages);
+    if (latestCommentIndex < 0) {
+      jumpToLatestFallback();
+      return;
+    }
+    const latestCommentAnchor = issueChatMessageAnchorId(messages[latestCommentIndex]);
+    if (!latestCommentAnchor) {
+      jumpToLatestFallback();
+      return;
+    }
+
+    const initial = scrollToThreadAnchor(latestCommentAnchor, { align: "end", behavior: "smooth" });
+    if (!initial) {
+      jumpToLatestFallback();
+      return;
+    }
+
+    if (typeof window === "undefined") return;
+
+    const settleDelays = [380, 760, 1140];
+    settleDelays.forEach((delay) => {
+      window.setTimeout(() => {
+        const el = document.getElementById(latestCommentAnchor);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "end" });
+          return;
+        }
+        // The row may still be outside the virtualizer's render buffer; nudge
+        // the offset so it gets mounted, then the next pass can align with
+        // real DOM measurements.
+        virtualizedThreadRef.current?.scrollToIndex(latestCommentIndex, {
+          align: "end",
+          behavior: "auto",
+        });
+      }, delay);
+    });
+  }
+
+  function handleJumpToLatest() {
+    if (onRefreshLatestComments) {
+      // Refetching from page 0 (newest first) brings any comments that
+      // arrived after the initial load into the cache before we scroll —
+      // otherwise we'd land on the latest *loaded* row rather than the
+      // absolute newest, which is what PAP-2672 reopened on.
+      const refreshed = onRefreshLatestComments();
+      if (refreshed && typeof (refreshed as Promise<unknown>).then === "function") {
+        (refreshed as Promise<unknown>).then(
+          () => scrollToLatestCommentWithSettle(),
+          () => scrollToLatestCommentWithSettle(),
+        );
+        return;
+      }
+    }
+    scrollToLatestCommentWithSettle();
   }
 
   const stableOnVote = useStableEvent(onVote);
