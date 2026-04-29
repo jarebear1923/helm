@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InviteLandingPage } from "./InviteLanding";
+import { queryKeys } from "../lib/queryKeys";
 
 const getInviteMock = vi.hoisted(() => vi.fn());
 const acceptInviteMock = vi.hoisted(() => vi.fn());
@@ -146,7 +147,7 @@ describe("InviteLandingPage", () => {
     await flushReact();
     await flushReact();
 
-    expect(container.textContent).toContain("You've been invited to join Paperclip");
+    expect(container.textContent).toContain("You've been invited to join Helm");
     expect(container.textContent).toContain("Join Acme Robotics");
     expect(container.textContent).toContain("Create account");
     expect(container.textContent).toContain("I already have an account");
@@ -272,7 +273,7 @@ describe("InviteLandingPage", () => {
       password: "wrongpass",
     });
     expect(container.textContent).toContain(
-      "That email and password did not match an existing Paperclip account. Check both fields, or create an account first if you are new here.",
+      "That email and password did not match an existing Helm account. Check both fields, or create an account first if you are new here.",
     );
 
     await act(async () => {
@@ -355,6 +356,7 @@ describe("InviteLandingPage", () => {
     expect(acceptInviteMock).toHaveBeenCalledWith("pcp_invite_test", { requestType: "human" });
     expect(setSelectedCompanyIdMock).toHaveBeenCalledWith("company-1", { source: "manual" });
     expect(localStorage.getItem("paperclip:pending-invite-token")).toBeNull();
+    expect(queryClient.getQueryData(queryKeys.companies.all)).toBeUndefined();
 
     await act(async () => {
       root.unmount();

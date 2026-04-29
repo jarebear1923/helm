@@ -246,9 +246,13 @@ export function InviteLandingPage() {
     enabled: token.length > 0,
     retry: false,
   });
+  const inviteCompaniesQueryKey = useMemo(
+    () => [...queryKeys.access.invite(token), "companies"] as const,
+    [token],
+  );
 
   const companiesQuery = useQuery({
-    queryKey: queryKeys.companies.all,
+    queryKey: inviteCompaniesQueryKey,
     queryFn: () => companiesApi.list(),
     enabled: !!sessionQuery.data && !!inviteQuery.data?.companyId,
     retry: false,
@@ -376,7 +380,7 @@ export function InviteLandingPage() {
       rememberPendingInviteToken(token);
       await queryClient.invalidateQueries({ queryKey: queryKeys.auth.session });
       const companies = await queryClient.fetchQuery({
-        queryKey: queryKeys.companies.all,
+        queryKey: inviteCompaniesQueryKey,
         queryFn: () => companiesApi.list(),
         retry: false,
       });
