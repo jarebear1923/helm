@@ -67,6 +67,24 @@ const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the
 - write a hiring plan
 - break the roadmap into concrete tasks and start delegating work`;
 
+export function getBlockingAdapterEnvironmentMessage(
+  result: AdapterEnvironmentTestResult
+): string | null {
+  if (result.status !== "fail") return null;
+
+  const failedCheck =
+    result.checks.find((check) => check.level === "error") ??
+    result.checks[0] ??
+    null;
+
+  if (!failedCheck) {
+    return "Adapter environment check failed. Fix the adapter environment or choose another adapter before creating this agent.";
+  }
+
+  const hint = failedCheck.hint ? ` ${failedCheck.hint}` : "";
+  return `${failedCheck.message}${hint}`;
+}
+
 export function OnboardingWizard() {
   const { onboardingOpen, onboardingOptions, closeOnboarding } = useDialog();
   const { companies, setSelectedCompanyId, loading: companiesLoading } = useCompany();
@@ -457,6 +475,11 @@ export function OnboardingWizard() {
       if (isLocalAdapter) {
         const result = adapterEnvResult ?? (await runAdapterEnvironmentTest());
         if (!result) return;
+        const blockingMessage = getBlockingAdapterEnvironmentMessage(result);
+        if (blockingMessage) {
+          setError(blockingMessage);
+          return;
+        }
       }
 
       const hire = await agentsApi.hire(createdCompanyId, {
