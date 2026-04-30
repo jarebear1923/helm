@@ -2769,6 +2769,7 @@ export function issueService(db: Db) {
         const values = {
           ...issueData,
           requestDepth: clampIssueRequestDepth(issueData.requestDepth),
+          metadata: issueData.metadata ?? {},
           originKind: issueData.originKind ?? "manual",
           goalId: resolveIssueGoalId({
             projectId: issueData.projectId,
@@ -2856,6 +2857,9 @@ export function issueService(db: Db) {
       };
       if (issueData.requestDepth !== undefined) {
         patch.requestDepth = clampIssueRequestDepth(issueData.requestDepth);
+      }
+      if (issueData.metadata !== undefined) {
+        patch.metadata = issueData.metadata;
       }
 
       const nextAssigneeAgentId =
