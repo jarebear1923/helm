@@ -84,4 +84,19 @@ describe("redaction", () => {
     expect(result).not.toContain(githubToken);
     expect(result).not.toContain(jwt);
   });
+
+  it("redacts lowercase secret assignment text", () => {
+    const result = redactSensitiveText(
+      "password=lowercase-password token: lowercase-token api_key: lowercase-api-key authorization=lowercase-auth Bearer lowercase-bearer",
+    );
+
+    expect(result).not.toContain("lowercase-password");
+    expect(result).not.toContain("lowercase-token");
+    expect(result).not.toContain("lowercase-api-key");
+    expect(result).not.toContain("lowercase-auth");
+    expect(result).not.toContain("lowercase-bearer");
+    expect(result).toBe(
+      "password=***REDACTED*** token: ***REDACTED*** api_key: ***REDACTED*** authorization=***REDACTED*** Bearer ***REDACTED***",
+    );
+  });
 });

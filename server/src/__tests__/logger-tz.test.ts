@@ -27,6 +27,7 @@ const mockPino = vi.hoisted(() => {
   (fn as any).transport = mockTransport;
   return fn;
 });
+const mockPinoHttp = vi.hoisted(() => vi.fn(() => vi.fn()));
 
 // Mock fs so the module-level mkdirSync call is a no-op in tests.
 vi.mock("node:fs", async (importOriginal) => {
@@ -38,7 +39,7 @@ vi.mock("pino", () => ({
   default: mockPino,
 }));
 vi.mock("pino-http", () => ({
-  pinoHttp: vi.fn(() => vi.fn()),
+  pinoHttp: mockPinoHttp,
 }));
 vi.mock("../config-file.js", () => ({
   readConfigFile: vi.fn(() => null),
@@ -51,6 +52,7 @@ vi.mock("../home-paths.js", () => ({
 describe("logger translateTime respects TZ environment variable", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
   });
 
   it("configures pino-pretty with SYS:HH:MM:ss so timestamps honour the TZ env var", async () => {
@@ -63,6 +65,18 @@ describe("logger translateTime respects TZ environment variable", () => {
     for (const target of targets) {
       expect(target.options.translateTime).toBe("SYS:HH:MM:ss");
     }
+    const loggerOptions = mockPino.mock.calls[0][0] as {
+      redact?: { paths?: string[]; censor?: string };
+    };
+    expect(loggerOptions.redact?.paths).toEqual(expect.arrayContaining([
+      "err",
+      "req.headers",
+      "req.url",
+      "req.query",
+      "req.params",
+      "res.headers",
+    ]));
+    expect(loggerOptions.redact?.censor).toBe("***REDACTED***");
   });
 
   it("SYS: prefix produces timezone-sensitive output: UTC epoch formats differently under UTC vs UTC+8", () => {
@@ -93,5 +107,143 @@ describe("logger translateTime respects TZ environment variable", () => {
     expect(fmtUtc).toBe("00:00:00");
     expect(fmtSgt).toBe("08:00:00");
     expect(fmtUtc).not.toBe(fmtSgt);
+  });
+
+  it("redacts sensitive failed-request props before pino-http logs them", async () => {
+    await import("../middleware/logger.js");
+
+    expect(mockPinoHttp).toHaveBeenCalledOnce();
+    const options = mockPinoHttp.mock.calls[0][0] as {
+      customProps: (req: unknown, res: unknown) => Record<string, unknown>;
+      customSuccessMessage: (req: unknown, res: unknown) => string;
+      customErrorMessage: (req: unknown, res: unknown, err?: Error) => string;
+    };
+
+    const req = {
+      method: "POST",
+      url: "/api/auth/sign-in/email?token=do-not-log-url-token&cookie=do-not-log-cookie&session=do-not-log-session&safe=ok",
+      body: {
+        email: "dev@example.com",
+        password: "do-not-log-password",
+        nested: {
+          apiKey: "do-not-log-api-key",
+          note: "Authorization: Bearer do-not-log-bearer",
+          colonNote: "api_key: do-not-log-colon-api-key",
+        },
+      },
+      params: {
+        token: "do-not-log-param-token",
+      },
+      query: {
+        safe: "ok",
+        session: "aaa.bbb.ccc",
+      },
+      route: { path: "/api/auth/sign-in/email" },
+    };
+    const directProps = options.customProps(req, { statusCode: 401 });
+    const directJson = JSON.stringify(directProps);
+
+    expect(directJson).not.toContain("do-not-log-password");
+    expect(directJson).not.toContain("do-not-log-api-key");
+    expect(directJson).not.toContain("do-not-log-bearer");
+    expect(directJson).not.toContain("do-not-log-colon-api-key");
+    expect(directJson).not.toContain("do-not-log-param-token");
+    expect(directJson).not.toContain("aaa.bbb.ccc");
+    expect(directProps).toMatchObject({
+      reqBody: {
+        email: "dev@example.com",
+        password: "***REDACTED***",
+        nested: {
+          apiKey: "***REDACTED***",
+          note: "Authorization: Bearer ***REDACTED***",
+          colonNote: "api_key: ***REDACTED***",
+        },
+      },
+      reqParams: {
+        token: "***REDACTED***",
+      },
+      reqQuery: {
+        safe: "ok",
+        session: "***REDACTED***",
+      },
+      routePath: "/api/auth/sign-in/email",
+    });
+
+    const contextProps = options.customProps(
+      req,
+      {
+        statusCode: 500,
+        __errorContext: {
+          error: {
+            message: "upstream failed password=do-not-log-error-password",
+            details: {
+              refreshToken: "do-not-log-refresh-token",
+              note: "token: do-not-log-error-token",
+            },
+          },
+          reqBody: req.body,
+          reqParams: req.params,
+          reqQuery: req.query,
+        },
+      },
+    );
+    const contextJson = JSON.stringify(contextProps);
+
+    expect(contextJson).not.toContain("do-not-log-error-password");
+    expect(contextJson).not.toContain("do-not-log-refresh-token");
+    expect(contextJson).not.toContain("do-not-log-error-token");
+    expect(contextJson).not.toContain("do-not-log-password");
+    expect(contextProps).toMatchObject({
+      errorContext: {
+        message: "upstream failed password=***REDACTED***",
+        details: {
+          refreshToken: "***REDACTED***",
+          note: "token: ***REDACTED***",
+        },
+      },
+      reqBody: {
+        password: "***REDACTED***",
+      },
+    });
+
+    const successMessage = options.customSuccessMessage(req, { statusCode: 200 });
+    expect(successMessage).toContain(
+      "POST /api/auth/sign-in/email?token=***REDACTED***&cookie=***REDACTED***&session=***REDACTED***&safe=ok",
+    );
+    expect(successMessage).not.toContain("do-not-log-url-token");
+    expect(successMessage).not.toContain("do-not-log-cookie");
+    expect(successMessage).not.toContain("do-not-log-session");
+
+    const claimMessage = options.customSuccessMessage(
+      {
+        ...req,
+        url: "/board-claim/do-not-log-board-token?code=do-not-log-board-code&safe=ok",
+      },
+      { statusCode: 200 },
+    );
+    expect(claimMessage).toContain("/board-claim/***REDACTED***?code=***REDACTED***&safe=ok");
+    expect(claimMessage).not.toContain("do-not-log-board-token");
+    expect(claimMessage).not.toContain("do-not-log-board-code");
+
+    const errorMessage = options.customErrorMessage(
+      req,
+      {
+        statusCode: 500,
+        __errorContext: {
+          error: {
+            message: "upstream failed password: do-not-log-error-password",
+          },
+        },
+      },
+    );
+
+    expect(errorMessage).toContain(
+      "POST /api/auth/sign-in/email?token=***REDACTED***&cookie=***REDACTED***&session=***REDACTED***&safe=ok",
+    );
+    expect(errorMessage).toContain("password: ***REDACTED***");
+    expect(errorMessage).not.toContain("do-not-log-url-token");
+    expect(errorMessage).not.toContain("do-not-log-cookie");
+    expect(errorMessage).not.toContain("do-not-log-session");
+    expect(errorMessage).not.toContain("do-not-log-error-password");
   });
 });
