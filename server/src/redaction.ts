@@ -5,8 +5,10 @@ const JWT_TEXT_RE = /\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?
 const OPENAI_KEY_TEXT_RE = /\bsk-[A-Za-z0-9_-]{12,}\b/g;
 const GITHUB_TOKEN_TEXT_RE = /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g;
 const AUTHORIZATION_BEARER_TEXT_RE = /(\bAuthorization\s*:\s*Bearer\s+)[^\s"'`]+/gi;
-const ENV_SECRET_ASSIGNMENT_TEXT_RE =
-  /(\b[A-Za-z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD|PASSWD|AUTHORIZATION|JWT)[A-Za-z0-9_]*\s*=\s*)[^\s"'`]+/gi;
+const BARE_BEARER_TEXT_RE = /(\bBearer\s+)[^\s"'`]+/gi;
+const AUTHORIZATION_ASSIGNMENT_TEXT_RE = /(\bauthorization\s*[:=]\s*)(?!Bearer\s+)[^\s"'`,;]+/gi;
+const SECRET_ASSIGNMENT_TEXT_RE =
+  /(\b(?:[A-Za-z0-9_]*(?:api[-_]?key|access[-_]?token|auth[-_]?token|bearer|secret|passwd|password|credential|jwt|private[-_]?key|cookie|connectionstring|token|key)[A-Za-z0-9_]*|auth)\s*[:=]\s*)[^\s"'`,;]+/gi;
 const JSON_SECRET_FIELD_TEXT_RE =
   /((?:"|')?(?:api[-_]?key|access[-_]?token|auth(?:_?token)?|authorization|bearer|secret|passwd|password|credential|jwt|private[-_]?key|cookie|connectionstring)(?:"|')?\s*:\s*(?:"|'))[^"'`\r\n]+((?:"|'))/gi;
 const ESCAPED_JSON_SECRET_FIELD_TEXT_RE =
@@ -71,9 +73,11 @@ export function redactEventPayload(payload: Record<string, unknown> | null): Rec
 export function redactSensitiveText(input: string): string {
   return input
     .replace(AUTHORIZATION_BEARER_TEXT_RE, `$1${REDACTED_EVENT_VALUE}`)
+    .replace(BARE_BEARER_TEXT_RE, `$1${REDACTED_EVENT_VALUE}`)
+    .replace(AUTHORIZATION_ASSIGNMENT_TEXT_RE, `$1${REDACTED_EVENT_VALUE}`)
     .replace(JSON_SECRET_FIELD_TEXT_RE, `$1${REDACTED_EVENT_VALUE}$2`)
     .replace(ESCAPED_JSON_SECRET_FIELD_TEXT_RE, `$1${REDACTED_EVENT_VALUE}$2`)
-    .replace(ENV_SECRET_ASSIGNMENT_TEXT_RE, `$1${REDACTED_EVENT_VALUE}`)
+    .replace(SECRET_ASSIGNMENT_TEXT_RE, `$1${REDACTED_EVENT_VALUE}`)
     .replace(OPENAI_KEY_TEXT_RE, REDACTED_EVENT_VALUE)
     .replace(GITHUB_TOKEN_TEXT_RE, REDACTED_EVENT_VALUE)
     .replace(JWT_TEXT_RE, REDACTED_EVENT_VALUE);
